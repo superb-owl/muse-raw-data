@@ -1,0 +1,147 @@
+import asyncio
+import threading
+import time
+import numpy as np
+from muselsl import stream, list_muses
+from pylsl import StreamInlet, resolve_byprop
+
+from scipy.signal import butter, lfilter, lfilter_zi
+
+NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
+
+class Band:
+    Delta = 0
+    Theta = 1
+    Alpha = 2
+    Beta = 3
+
+
+""" EXPERIMENTAL PARAMETERS """
+# Modify these to change aspects of the signal processing
+
+# Length of the EEG data buffer (in seconds)
+# This buffer will hold last n seconds of data and be used for calculations
+BUFFER_LENGTH = 5
+
+# Length of the epochs used to compute the FFT (in seconds)
+EPOCH_LENGTH = 1
+
+# Amount of overlap between two consecutive epochs (in seconds)
+OVERLAP_LENGTH = 0.8
+
+# Amount to 'shift' the start of each next consecutive epoch
+SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
+
+# Index of the channel(s) (electrodes) to be used
+# 0 = left ear, 1 = left forehead, 2 = right forehead, 3 = right ear
+INDEX_CHANNEL = [0]
+
+
+def start_stream():
+    muses = list_muses()
+    print("streaming from", muses[0]['address'])
+    stream(muses[0]['address'], ppg_enabled=True, acc_enabled=True, gyro_enabled=True)
+    print("done streaming")
+
+def pull_eeg_data():
+    streams = []
+    while len(streams) == 0:
+        print("Waiting for streams...")
+        time.sleep(1)
+        streams = resolve_byprop('type', 'EEG', timeout=2)
+    print("got streams", len(streams))
+
+    inlet = StreamInlet(streams[0], max_chunklen=12)
+    eeg_time_correction = inlet.time_correction()
+
+    # Get the stream info and description
+    info = inlet.info()
+    description = info.desc()
+
+    # Get the sampling frequency
+    # This is an important value that represents how many EEG data points are
+    # collected in a second. This influences our frequency band calculation.
+    # for the Muse 2016, this should always be 256
+    fs = int(info.nominal_srate())
+
+    """ 2. INITIALIZE BUFFERS """
+
+    # Initialize raw EEG data buffer
+    eeg_buffer = np.zeros((int(fs * BUFFER_LENGTH), 1))
+    filter_state = None  # for use with the notch filter
+
+    # Compute the number of epochs in "buffer_length"
+    n_win_test = int(np.floor((BUFFER_LENGTH - EPOCH_LENGTH) /
+                              SHIFT_LENGTH + 1))
+
+    # Initialize the band power buffer (for plotting)
+    # bands will be ordered: [delta, theta, alpha, beta]
+    band_buffer = np.zeros((n_win_test, 4))
+
+    """ 3. GET DATA """
+
+    # The try/except structure allows to quit the while loop by aborting the
+    # script with <Ctrl-C>
+    print('Press Ctrl-C in the console to break the while loop.')
+
+    try:
+        # The following loop acquires data, computes band powers, and calculates neurofeedback metrics based on those band powers
+        while True:
+
+            """ 3.1 ACQUIRE DATA """
+            # Obtain EEG data from the LSL stream
+            eeg_data, timestamp = inlet.pull_chunk(
+                timeout=1, max_samples=int(SHIFT_LENGTH * fs))
+
+            # Only keep the channel we're interested in
+            ch_data = np.array(eeg_data)[:, INDEX_CHANNEL]
+
+            # Update EEG buffer with the new data
+            eeg_buffer, filter_state = update_buffer(
+                eeg_buffer, ch_data, notch=True,
+                filter_state=filter_state)
+
+            print(eeg_buffer)
+            print(filter_state)
+
+    except KeyboardInterrupt:
+        print('Closing!')
+
+
+def update_buffer(data_buffer, new_data, notch=False, filter_state=None):
+    """
+    Concatenates "new_data" into "data_buffer", and returns an array with
+    the same size as "data_buffer"
+    """
+    if new_data.ndim == 1:
+        new_data = new_data.reshape(-1, data_buffer.shape[1])
+
+    if notch:
+        if filter_state is None:
+            filter_state = np.tile(lfilter_zi(NOTCH_B, NOTCH_A),
+                                   (data_buffer.shape[1], 1)).T
+        new_data, filter_state = lfilter(NOTCH_B, NOTCH_A, new_data, axis=0,
+                                         zi=filter_state)
+
+    new_buffer = np.concatenate((data_buffer, new_data), axis=0)
+    new_buffer = new_buffer[new_data.shape[0]:, :]
+
+    return new_buffer, filter_state
+
+
+import asyncio
+import websockets
+
+async def serve_eeg_data(websocket):
+    name = await websocket.recv()
+    print("< {}".format(name))
+
+    greeting = "Hello {}!".format(name)
+    await websocket.send(greeting)
+    print("> {}".format(greeting))
+
+if __name__ == "__main__":
+    start_server = websockets.serve(serve_eeg_data, 'localhost', 8080)
+    asyncio.get_event_loop().run_until_complete(start_server)
+    asyncio.get_event_loop().run_forever()
+    pull_eeg_data()
