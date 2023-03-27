@@ -5,5 +5,5 @@ socket.onopen = (event) => {
 };
 socket.addEventListener("message", (event) => {
   console.log("Message from server");
-  window.data = JSON.parse(event.data).eeg_buffer;
+  window.data = JSON.parse(event.data);
 });
