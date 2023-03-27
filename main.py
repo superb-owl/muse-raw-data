@@ -1,3 +1,4 @@
+import os
 import asyncio
 import threading
 import csv
@@ -202,8 +203,10 @@ async def start_server():
     await server.wait_closed()
 
 if __name__ == "__main__":
-    #update_thread = threading.Thread(target=pull_eeg_data)
     print('Press Ctrl-C in the console to break the while loop.')
-    update_thread = threading.Thread(target=start_fake_eeg_loop)
+    if os.getenv("FAKE") == "true":
+        update_thread = threading.Thread(target=start_fake_eeg_loop)
+    else:
+        update_thread = threading.Thread(target=pull_eeg_data)
     update_thread.start()
     asyncio.run(start_server())
