@@ -12,6 +12,7 @@ from scipy.signal import butter, lfilter, lfilter_zi
 NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
 
 eeg_buffer = np.array([])
+sample_rate = 0
 
 class Band:
     Delta = 0
@@ -26,7 +27,7 @@ NUM_BANDS = 5
 
 # Length of the EEG data buffer (in seconds)
 # This buffer will hold last n seconds of data and be used for calculations
-BUFFER_LENGTH = 5
+BUFFER_LENGTH = 2
 
 # Length of the epochs used to compute the FFT (in seconds)
 EPOCH_LENGTH = 1
@@ -50,6 +51,7 @@ def start_stream():
 
 def pull_eeg_data():
     global eeg_buffer
+    global sample_rate
     streams = []
     while len(streams) == 0:
         print("Waiting for streams...")
@@ -68,12 +70,12 @@ def pull_eeg_data():
     # This is an important value that represents how many EEG data points are
     # collected in a second. This influences our frequency band calculation.
     # for the Muse 2016, this should always be 256
-    fs = int(info.nominal_srate())
+    sample_rate = int(info.nominal_srate())
 
     """ 2. INITIALIZE BUFFERS """
 
     # Initialize raw EEG data buffer
-    eeg_buffer = np.zeros((int(fs * BUFFER_LENGTH), NUM_BANDS))
+    eeg_buffer = np.zeros((int(sample_rate * BUFFER_LENGTH), NUM_BANDS))
 
     # Compute the number of epochs in "buffer_length"
     n_win_test = int(np.floor((BUFFER_LENGTH - EPOCH_LENGTH) /
@@ -90,25 +92,17 @@ def pull_eeg_data():
     print('Press Ctrl-C in the console to break the while loop.')
 
     filter_state = None
-
     try:
-        # The following loop acquires data, computes band powers, and calculates neurofeedback metrics based on those band powers
         while True:
-
-            """ 3.1 ACQUIRE DATA """
-            # Obtain EEG data from the LSL stream
             eeg_data, timestamp = inlet.pull_chunk(
                 timeout=1, max_samples=int(SHIFT_LENGTH * fs))
 
-            # Only keep the channel we're interested in
-            ch_data = np.array(eeg_data) #[:, INDEX_CHANNEL]
+            ch_data = np.array(eeg_data)
 
-            # Update EEG buffer with the new data
             eeg_buffer, filter_state = update_buffer(
                 eeg_buffer, ch_data, notch=True,
                 filter_state=filter_state)
             print("data")
-
     except KeyboardInterrupt:
         print('Closing!')
 
@@ -133,14 +127,56 @@ def update_buffer(data_buffer, new_data, notch=False, filter_state=None):
 
     return new_buffer, filter_state
 
+def nextpow2(i):
+    """
+    Find the next power of 2 for number i
+    """
+    n = 1
+    while n < i:
+        n *= 2
+    return n
+
+def get_band(where, PSD):
+    return np.mean(PSD[where, :], axis=1)[0]
+
+def compute_fft(data):
+    winSampleLength, nbCh = data.shape
+
+    # Apply Hamming window
+    w = np.hamming(winSampleLength)
+    dataWinCentered = data - np.mean(data, axis=0)  # Remove offset
+    dataWinCenteredHam = (dataWinCentered.T * w).T
+
+    NFFT = nextpow2(winSampleLength)
+    Y = np.fft.fft(dataWinCenteredHam, n=NFFT, axis=0) / winSampleLength
+    PSD = 2 * np.abs(Y[0:int(NFFT / 2), :])
+    f = sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
+
+    bands = {
+            'delta': get_band(np.where(f < 4), PSD).tolist(),
+            'theta': get_band(np.where((f >= 4) & (f <= 8)), PSD).tolist(),
+            'alpha': get_band(np.where((f >= 8) & (f <= 12)), PSD).tolist(),
+            'beta': get_band(np.where((f >= 12) & (f < 30)), PSD).tolist(),
+            'gamma': get_band(np.where((f >= 30) & (f < 80)), PSD).tolist(),
+    }
+
+    return PSD, bands
+
 # WebSocket server handler function
 async def websocket_handler(websocket, path):
     global eeg_buffer
     while True:
+        fft, bands = compute_fft(eeg_buffer)
         data = json.dumps({
+            'sample_rate': sample_rate,
+            'fft': fft.tolist(),
+            'bands': bands,
             'eeg_buffer': eeg_buffer.tolist(),
         })
-        await websocket.send(data)
+        try:
+            await websocket.send(data)
+        except (ConnectionClosed):
+            break
 
 # Function to start the WebSocket server
 async def start_server():
