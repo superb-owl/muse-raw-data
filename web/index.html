@@ -1,11 +1,21 @@
-<script>
-  console.log('opening websocket');
-  const socket = new WebSocket("ws://localhost:8080");
-  socket.onopen = (event) => {
-    console.log("websocket open");
-    socket.send("Here's some text that the server is urgently awaiting!");
-  };
-  socket.addEventListener("message", (event) => {
-    console.log("Message from server ", event.data);
-  });
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-line Graph</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        .line {
+            fill: none;
+            stroke-width: 2px;
+        }
+    </style>
+</head>
+<body>
+    <svg width="1200" height="400"></svg>
+    <script src="websocket.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+
