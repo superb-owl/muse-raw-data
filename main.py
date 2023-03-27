@@ -1,6 +1,8 @@
 import asyncio
 import threading
 import time
+import json
+import websockets
 import numpy as np
 from muselsl import stream, list_muses
 from pylsl import StreamInlet, resolve_byprop
@@ -8,6 +10,9 @@ from pylsl import StreamInlet, resolve_byprop
 from scipy.signal import butter, lfilter, lfilter_zi
 
 NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
+
+eeg_buffer = None
+filter_state = None
 
 class Band:
     Delta = 0
@@ -44,6 +49,8 @@ def start_stream():
     print("done streaming")
 
 def pull_eeg_data():
+    global eeg_buffer
+    global filter_state
     streams = []
     while len(streams) == 0:
         print("Waiting for streams...")
@@ -100,9 +107,7 @@ def pull_eeg_data():
             eeg_buffer, filter_state = update_buffer(
                 eeg_buffer, ch_data, notch=True,
                 filter_state=filter_state)
-
-            print(eeg_buffer)
-            print(filter_state)
+            print("data")
 
     except KeyboardInterrupt:
         print('Closing!')
@@ -128,20 +133,24 @@ def update_buffer(data_buffer, new_data, notch=False, filter_state=None):
 
     return new_buffer, filter_state
 
+# WebSocket server handler function
+async def websocket_handler(websocket, path):
+    global eeg_buffer
+    global filter_state
+    while True:
+        print("send")
+        data = json.dumps({
+            'eeg_buffer': eeg_buffer.tolist(),
+            'filter_state': filter_state.tolist(),
+        })
+        await websocket.send(data)
 
-import asyncio
-import websockets
-
-async def serve_eeg_data(websocket):
-    name = await websocket.recv()
-    print("< {}".format(name))
-
-    greeting = "Hello {}!".format(name)
-    await websocket.send(greeting)
-    print("> {}".format(greeting))
+# Function to start the WebSocket server
+async def start_server():
+    server = await websockets.serve(websocket_handler, 'localhost', 8080)
+    await server.wait_closed()
 
 if __name__ == "__main__":
-    start_server = websockets.serve(serve_eeg_data, 'localhost', 8080)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
-    pull_eeg_data()
+    update_thread = threading.Thread(target=pull_eeg_data)
+    update_thread.start()
+    asyncio.run(start_server())

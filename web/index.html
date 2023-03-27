@@ -1,8 +1,11 @@
 <script>
   console.log('opening websocket');
-  const exampleSocket = new WebSocket("ws://localhost:8080");
-  exampleSocket.onopen = (event) => {
+  const socket = new WebSocket("ws://localhost:8080");
+  socket.onopen = (event) => {
     console.log("websocket open");
-    exampleSocket.send("Here's some text that the server is urgently awaiting!");
+    socket.send("Here's some text that the server is urgently awaiting!");
   };
+  socket.addEventListener("message", (event) => {
+    console.log("Message from server ", event.data);
+  });
 </script>
