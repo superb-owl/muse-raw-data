@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import csv
 import time
 import json
 import websockets
@@ -10,9 +11,6 @@ from pylsl import StreamInlet, resolve_byprop
 from scipy.signal import butter, lfilter, lfilter_zi
 
 NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
-
-eeg_buffer = np.array([])
-sample_rate = 0
 
 class Band:
     Delta = 0
@@ -41,6 +39,9 @@ SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
 # Index of the channel(s) (electrodes) to be used
 # 0 = left ear, 1 = left forehead, 2 = right forehead, 3 = right ear
 INDEX_CHANNEL = [0]
+
+sample_rate = 256 # Will be set explicitly below, in case it's different
+eeg_buffer = np.zeros((int(sample_rate * BUFFER_LENGTH), NUM_BANDS))
 
 
 def start_stream():
@@ -71,31 +72,48 @@ def pull_eeg_data():
     # collected in a second. This influences our frequency band calculation.
     # for the Muse 2016, this should always be 256
     sample_rate = int(info.nominal_srate())
-
-    """ 2. INITIALIZE BUFFERS """
-
-    # Initialize raw EEG data buffer
     eeg_buffer = np.zeros((int(sample_rate * BUFFER_LENGTH), NUM_BANDS))
 
-    # Compute the number of epochs in "buffer_length"
-    n_win_test = int(np.floor((BUFFER_LENGTH - EPOCH_LENGTH) /
-                              SHIFT_LENGTH + 1))
+    start_eeg_loop(inlet)
 
-    # Initialize the band power buffer (for plotting)
-    # bands will be ordered: [delta, theta, alpha, beta]
-    band_buffer = np.zeros((n_win_test, NUM_BANDS))
 
-    """ 3. GET DATA """
+def start_fake_eeg_loop():
+    global eeg_buffer
+    filter_state = None
+    with open('fake_data.csv', 'r') as f:
+        reader = csv.reader(f)
+        data = [row[1:] for row in reader]
+        data = data[1:]
+        data = [[float(x) for x in row] for row in data]
 
-    # The try/except structure allows to quit the while loop by aborting the
-    # script with <Ctrl-C>
-    print('Press Ctrl-C in the console to break the while loop.')
+    cur_idx = 0
+    try:
+        while True:
+            start_idx = cur_idx
+            end_idx = start_idx + int(SHIFT_LENGTH * sample_rate)
+            if end_idx > len(data):
+                cur_idx = 0
+                continue
+            eeg_data = data[start_idx:end_idx]
+            cur_idx = end_idx
 
+            ch_data = np.array(eeg_data)
+
+            eeg_buffer, filter_state = update_buffer(
+                eeg_buffer, ch_data, notch=True,
+                filter_state=filter_state)
+            time.sleep(SHIFT_LENGTH)
+            print("data")
+    except KeyboardInterrupt:
+        print('Closing!')
+
+def start_eeg_loop(inlet):
+    global eeg_buffer
     filter_state = None
     try:
         while True:
             eeg_data, timestamp = inlet.pull_chunk(
-                timeout=1, max_samples=int(SHIFT_LENGTH * fs))
+                timeout=1, max_samples=int(SHIFT_LENGTH * sample_rate))
 
             ch_data = np.array(eeg_data)
 
@@ -175,7 +193,7 @@ async def websocket_handler(websocket, path):
         })
         try:
             await websocket.send(data)
-        except (ConnectionClosed):
+        except Exception as e:
             break
 
 # Function to start the WebSocket server
@@ -184,6 +202,8 @@ async def start_server():
     await server.wait_closed()
 
 if __name__ == "__main__":
-    update_thread = threading.Thread(target=pull_eeg_data)
+    #update_thread = threading.Thread(target=pull_eeg_data)
+    print('Press Ctrl-C in the console to break the while loop.')
+    update_thread = threading.Thread(target=start_fake_eeg_loop)
     update_thread.start()
     asyncio.run(start_server())
