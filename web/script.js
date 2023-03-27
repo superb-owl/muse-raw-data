@@ -26,9 +26,8 @@ function drawLines() {
     window.requestAnimationFrame(drawLines);
     return;
   }
-    g.selectAll('path').remove();
+  g.selectAll('path').remove();
 
-// Draw lines
   data[0].forEach((_, i) => {
       const lineData = data.map(d => d[i]);
       g.append('path')

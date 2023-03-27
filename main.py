@@ -11,8 +11,7 @@ from scipy.signal import butter, lfilter, lfilter_zi
 
 NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
 
-eeg_buffer = None
-filter_state = None
+eeg_buffer = np.array([])
 
 class Band:
     Delta = 0
@@ -20,6 +19,7 @@ class Band:
     Alpha = 2
     Beta = 3
 
+NUM_BANDS = 5
 
 """ EXPERIMENTAL PARAMETERS """
 # Modify these to change aspects of the signal processing
@@ -50,7 +50,6 @@ def start_stream():
 
 def pull_eeg_data():
     global eeg_buffer
-    global filter_state
     streams = []
     while len(streams) == 0:
         print("Waiting for streams...")
@@ -74,8 +73,7 @@ def pull_eeg_data():
     """ 2. INITIALIZE BUFFERS """
 
     # Initialize raw EEG data buffer
-    eeg_buffer = np.zeros((int(fs * BUFFER_LENGTH), 1))
-    filter_state = None  # for use with the notch filter
+    eeg_buffer = np.zeros((int(fs * BUFFER_LENGTH), NUM_BANDS))
 
     # Compute the number of epochs in "buffer_length"
     n_win_test = int(np.floor((BUFFER_LENGTH - EPOCH_LENGTH) /
@@ -83,13 +81,15 @@ def pull_eeg_data():
 
     # Initialize the band power buffer (for plotting)
     # bands will be ordered: [delta, theta, alpha, beta]
-    band_buffer = np.zeros((n_win_test, 4))
+    band_buffer = np.zeros((n_win_test, NUM_BANDS))
 
     """ 3. GET DATA """
 
     # The try/except structure allows to quit the while loop by aborting the
     # script with <Ctrl-C>
     print('Press Ctrl-C in the console to break the while loop.')
+
+    filter_state = None
 
     try:
         # The following loop acquires data, computes band powers, and calculates neurofeedback metrics based on those band powers
@@ -101,7 +101,7 @@ def pull_eeg_data():
                 timeout=1, max_samples=int(SHIFT_LENGTH * fs))
 
             # Only keep the channel we're interested in
-            ch_data = np.array(eeg_data)[:, INDEX_CHANNEL]
+            ch_data = np.array(eeg_data) #[:, INDEX_CHANNEL]
 
             # Update EEG buffer with the new data
             eeg_buffer, filter_state = update_buffer(
@@ -136,12 +136,9 @@ def update_buffer(data_buffer, new_data, notch=False, filter_state=None):
 # WebSocket server handler function
 async def websocket_handler(websocket, path):
     global eeg_buffer
-    global filter_state
     while True:
-        print("send")
         data = json.dumps({
             'eeg_buffer': eeg_buffer.tolist(),
-            'filter_state': filter_state.tolist(),
         })
         await websocket.send(data)
 
