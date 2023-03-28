@@ -155,8 +155,11 @@ def nextpow2(i):
         n *= 2
     return n
 
-def get_band(where, PSD):
-    return np.mean(PSD[where, :], axis=1)[0]
+def get_band(start, end, f, PSD):
+    # Band power is set to max of all relevant frequencies
+    # Other people take the sum or average
+    # Max seems like the best measure IMO--no penalty for a tight peak
+    return np.max(PSD[np.where((f >= start) & (f < end)), :], axis=1)[0]
 
 def compute_fft(data):
     winSampleLength, nbCh = data.shape
@@ -173,11 +176,11 @@ def compute_fft(data):
     f = freq_buckets
 
     bands = {
-            'delta': get_band(np.where(f < 4), PSD).tolist(),
-            'theta': get_band(np.where((f >= 4) & (f < 8)), PSD).tolist(),
-            'alpha': get_band(np.where((f >= 8) & (f < 12)), PSD).tolist(),
-            'beta': get_band(np.where((f >= 12) & (f < 30)), PSD).tolist(),
-            'gamma': get_band(np.where((f >= 30) & (f < 80)), PSD).tolist(),
+            'delta': get_band(1, 4, f, PSD).tolist(),
+            'theta': get_band(4, 8, f, PSD).tolist(),
+            'alpha': get_band(8, 12, f, PSD).tolist(),
+            'beta':  get_band(12, 30, f, PSD).tolist(),
+            'gamma': get_band(30, 80, f, PSD).tolist(),
     }
 
     return PSD, freq_buckets, bands

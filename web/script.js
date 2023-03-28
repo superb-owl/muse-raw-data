@@ -1,6 +1,26 @@
 window.data = null;
-const labels = ['TP9', 'AF7', 'AF8', 'TP10', 'Right AUX'];
-const bands = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
+const labels = ['TP9', 'AF7', 'AF8', 'TP10'];
+const bandColors = {
+  delta: '#07136a',
+  theta: '#0a1c9f',
+  alpha: '#0d26d4',
+  beta: '#2a42f0',
+  gamma: '#5f71f4',
+}
+const bandAbbrevs = {
+    delta: 'δ',
+    theta: 'θ',
+    alpha: 'α',
+    beta: 'β',
+    gamma: 'γ',
+}
+const bands = {
+  delta: [1, 4],
+  theta: [4, 8],
+  alpha: [8, 12],
+  beta: [12, 30],
+  gamma: [30, 80],
+}
 const svg = d3.select('svg');
 const margin = { top: 20, right: 20, bottom: 30, left: 50 };
 const width = +svg.attr('width') - margin.left - margin.right;
@@ -17,55 +37,52 @@ function drawLines() {
   }
   svg.selectAll('g').remove();
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-  data.eeg_buffer[0].forEach((_, sensorIdx) => {
+  labels.forEach((_, sensorIdx) => {
     const offset = sensorIdx * GRAPH_OFFSET;
     const xScale = d3.scaleLinear().range([0, width]).domain([0, data.eeg_buffer.length]);
     const yScale = d3.scaleLinear().range([offset + GRAPH_HEIGHT, offset]).domain([-1000, 1000]);
 
     const FREQ_WIDTH = 400;
-    const SKIP_FREQUENCIES = 4; // exclude the 0 frequency due to log10 issues...what is that?
-    freq_range = [data.frequency_buckets[SKIP_FREQUENCIES], data.frequency_buckets[data.frequency_buckets.length - 1]];
+    const SKIP_FREQUENCIES = 2; // exclude the 0 frequency due to log10 issues...what is that?
+    const freqDomain = [data.frequency_buckets[SKIP_FREQUENCIES], data.frequency_buckets[data.frequency_buckets.length - 1]];
+    const freqRange = d3.extent(data.fft.flat())
 
-    // domain refers to the x,y of the data. Ranges are the (inverted) svg coordinates
     const xFreqScale = d3.scaleLog()
-      .range([offset, GRAPH_HEIGHT + offset])
-      .domain(freq_range)
-    xFreqScale.ticks(3)
+      .domain(freqDomain)                     // domain refers to the x of the data
+      .range([offset, GRAPH_HEIGHT + offset]) // range refers to the y of the (inverted) svg coordinates
     const yFreqScale = d3.scaleLinear()
-      .range([0, FREQ_WIDTH])
-      .domain([0, 1000])
-    // these x, y refer to svg coordinates. y coord maps to x coord of data
-    const freqLine = d3.line()
+      .domain(freqRange)                      // domain refers to the y of the data
+      .range([0, FREQ_WIDTH])                 // range refers to the x of the (inverted) svg coordinates
+
+    const freqLine = d3.line() // these x, y refer to svg coordinates. y coord maps to x coord of data
         .y((d, i) => xFreqScale(data.frequency_buckets[i + SKIP_FREQUENCIES]))
         .x(d => yFreqScale(d));
 
-    // X and Y axes
     const xAxis = g.append('g')
         .attr('transform', `translate(0,${offset + GRAPH_HEIGHT / 2})`)
         .call(d3.axisBottom(xScale));
     const yAxis = g.append('g')
         .call(
-          d3.axisLeft(xFreqScale).ticks(3).tickFormat(x => `${x.toFixed(1)}Hz`)
+          // Skip some ticks to make the graph more readable
+          d3.axisLeft(xFreqScale).tickFormat((x, i) => i % 3 > 0 ? '' : `${x.toFixed(1)}Hz`)
         );
     g.append("text")
-    .attr("class", "y label")
-    .attr("text-anchor", "end")
-    .attr("dx", "-1em")
-    .attr("dy", ".2em")
-    .attr("y", offset + GRAPH_HEIGHT / 2)
-    .text(labels[sensorIdx]);
+        .attr("class", "y label")
+        .attr("text-anchor", "end")
+        .attr("dx", "-1em")
+        .attr("dy", ".5em")
+        .attr("y", offset + GRAPH_HEIGHT / 2)
+        .text(labels[sensorIdx]);
 
-    bands.forEach((band, bandIdx) => {
-      bandSize = data.bands[band][sensorIdx] * 100;
+    Object.keys(bands).forEach((band, bandIdx) => {
+      bandSize = data.bands[band][sensorIdx];
       g.append('rect')
-      .attr('x', bandIdx * 100)
-      .attr('y', yScale(bandSize))
-      .attr('width', 50)
-      .attr('height', yScale(0) - yScale(bandSize))
-      .attr('fill', d3.schemeCategory10[bandIdx])
+          .attr('x', xFreqScale(0))
+          .attr('y', xFreqScale(bands[band][0]))
+          .attr('height', xFreqScale(bands[band][1]) - xFreqScale(bands[band][0]))
+          .attr('width', yFreqScale(bandSize))
+          .attr('fill', bandColors[band])
     })
-
-    // Line generator
     const line = d3.line()
         .x((d, i) => xScale(i))
         .y(d => yScale(d));
@@ -77,12 +94,21 @@ function drawLines() {
         .attr('d', line)
         .attr('stroke', d3.schemeCategory10[6]); // Color from the predefined color scheme
 
-    const fftData = data.fft.map(d => d[sensorIdx] * 10).slice(SKIP_FREQUENCIES);
+    const fftData = data.fft.map(d => d[sensorIdx]).slice(SKIP_FREQUENCIES);
     g.append('path')
         .datum(fftData)
         .attr('class', 'line')
         .attr('d', freqLine)
-        .attr('stroke', d3.schemeCategory10[7]); // Color from the predefined color scheme
+        .attr('stroke', 'green'); // Color from the predefined color scheme
+
+    Object.keys(bands).forEach((band, bandIdx) => {
+      g.append("text")
+          .attr("x", xFreqScale(0) + 10)
+          .attr('y', .5 * (xFreqScale(bands[band][0]) + xFreqScale(bands[band][1])))
+          .attr("dy", ".3em")
+          .attr("dx", "1em")
+          .text(bandAbbrevs[band])
+    })
   });
   document.getElementById('Debug').innerHTML = `Sample rate: ${data.sample_rate} samples/sec`;
   window.requestAnimationFrame(drawLines);
