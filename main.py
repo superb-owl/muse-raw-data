@@ -169,26 +169,28 @@ def compute_fft(data):
     NFFT = nextpow2(winSampleLength)
     Y = np.fft.fft(dataWinCenteredHam, n=NFFT, axis=0) / winSampleLength
     PSD = 2 * np.abs(Y[0:int(NFFT / 2), :])
-    f = sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
+    freq_buckets = sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
+    f = freq_buckets
 
     bands = {
             'delta': get_band(np.where(f < 4), PSD).tolist(),
-            'theta': get_band(np.where((f >= 4) & (f <= 8)), PSD).tolist(),
-            'alpha': get_band(np.where((f >= 8) & (f <= 12)), PSD).tolist(),
+            'theta': get_band(np.where((f >= 4) & (f < 8)), PSD).tolist(),
+            'alpha': get_band(np.where((f >= 8) & (f < 12)), PSD).tolist(),
             'beta': get_band(np.where((f >= 12) & (f < 30)), PSD).tolist(),
             'gamma': get_band(np.where((f >= 30) & (f < 80)), PSD).tolist(),
     }
 
-    return PSD, bands
+    return PSD, freq_buckets, bands
 
 # WebSocket server handler function
 async def websocket_handler(websocket, path):
     global eeg_buffer
     while True:
-        fft, bands = compute_fft(eeg_buffer)
+        fft, buckets, bands = compute_fft(eeg_buffer)
         data = json.dumps({
             'sample_rate': sample_rate,
             'fft': fft.tolist(),
+            'frequency_buckets': buckets.tolist(),
             'bands': bands,
             'eeg_buffer': eeg_buffer.tolist(),
         })
