@@ -20,8 +20,8 @@ function drawCenterOfMass() {
   }
   svg.selectAll('g').remove();
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-  const xScale = d3.scaleLinear().range([0, width]).domain([-1000, 1000]);
-  const yScale = d3.scaleLinear().range([height, 0]).domain([-1000, 1000]);
+  const xScale = d3.scaleLinear().range([0, width]).domain([-100, 100]);
+  const yScale = d3.scaleLinear().range([height, 0]).domain([-100, 100]);
 
   g.append('circle') // nose
     .attr('cx', width / 2).attr('cy', 0)
@@ -51,41 +51,34 @@ function drawCenterOfMass() {
       }
   }
 
-  const numTimeBuckets = 1;
-  const bucketSize = Math.floor(data.eeg_buffer[0].length / numTimeBuckets);
-  const buckets = [];
-  for (let bucket = 0; bucket < numTimeBuckets; bucket++) {
-    const bucketStart = bucket * bucketSize;
-    const weights = {};
-    Object.keys(bands).concat(['all']).forEach((band) => {
-      weights[band] = {
-        front: 0,
-        back: 0,
-        left: 0,
-        right: 0,
-      };
-    })
-    labels.forEach((sensorLabel, sensorIdx) => {
-      const bucketData = data.eeg_buffer.map(d => d[sensorIdx]).slice(bucketStart, bucketStart + bucketSize);
-      adjustWeights(weights.all, bucketData, sensorLabel);
-      Object.keys(bands).forEach((band, bandIdx) => {
-        const bucketBandData = [data.bands[band][sensorIdx] * 10];
-        adjustWeights(weights[band], bucketBandData, sensorLabel);
-      });
+  const weights = {};
+  Object.keys(bands).concat(['all']).forEach((band) => {
+    weights[band] = {
+      front: 0,
+      back: 0,
+      left: 0,
+      right: 0,
+    };
+  })
+  labels.forEach((sensorLabel, sensorIdx) => {
+    const allBandsData = Object.keys(bands).map(band => data.bands[band][sensorIdx])
+    adjustWeights(weights.all, allBandsData, sensorLabel);
+    Object.keys(bands).forEach((band, bandIdx) => {
+      const bandData = [data.bands[band][sensorIdx]];
+      adjustWeights(weights[band], bandData, sensorLabel);
     });
-    console.log('weights', weights);
-    Object.keys(weights).forEach(band => {
-      const xLoc = weights[band].right - weights[band].left;
-      const yLoc = weights[band].back - weights[band].front;
-      const total = weights[band].right + weights[band].left + weights[band].back + weights[band].front;
-      g.append('circle')
-        .attr('cx', xScale(xLoc)).attr('cy', yScale(yLoc))
-        .attr('r', 20 * total / 4000)
-        .attr('stroke-width', 2)
-        .attr('stroke', bandColors[band])
-        .attr('fill', 'none')
-    })
-  }
+  });
+  Object.keys(weights).forEach(band => {
+    const xLoc = weights[band].right - weights[band].left;
+    const yLoc = weights[band].back - weights[band].front;
+    const total = weights[band].right + weights[band].left + weights[band].back + weights[band].front;
+    g.append('circle')
+      .attr('cx', xScale(xLoc)).attr('cy', yScale(yLoc))
+      .attr('r', 20 * total / 400)
+      .attr('stroke-width', 2)
+      .attr('stroke', bandColors[band])
+      .attr('fill', 'none')
+  })
 
   window.requestAnimationFrame(drawCenterOfMass);
 }
