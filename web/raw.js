@@ -78,7 +78,7 @@ function drawLines() {
     Object.keys(bands).forEach((band, bandIdx) => {
       const bandSize = data.bands[band][sensorIdx];
       g.append('rect')
-          .attr('x', xFreqScale(0))
+          .attr('x', yFreqScale(0))
           .attr('y', xFreqScale(bands[band][0]))
           .attr('height', xFreqScale(bands[band][1]) - xFreqScale(bands[band][0]))
           .attr('width', yFreqScale(bandSize))
@@ -104,10 +104,10 @@ function drawLines() {
 
     Object.keys(bands).forEach((band, bandIdx) => {
       const barWidth = yFreqScale(data.bands[band][sensorIdx]);
-      const xLoc = yFreqScale(0) + 10;
-      const color = barWidth < xLoc + 10 ? "black" : "white";
+      const xLoc = yFreqScale(0);
+      const color = barWidth < xLoc + 20 ? "black" : "white";
       g.append("text")
-          .attr("x", xFreqScale(0) + 10)
+          .attr("x", yFreqScale(0))
           .attr('y', .5 * (xFreqScale(bands[band][0]) + xFreqScale(bands[band][1])))
           .attr("dy", ".3em")
           .attr("dx", "1em")
