@@ -21,7 +21,7 @@ const bands = {
   beta: [12, 30],
   gamma: [30, 80],
 }
-const svg = d3.select('svg');
+const svg = d3.select('svg#RawData');
 const margin = { top: 20, right: 20, bottom: 30, left: 50 };
 const width = +svg.attr('width') - margin.left - margin.right;
 const height = +svg.attr('height') - margin.top - margin.bottom;
@@ -29,6 +29,7 @@ const height = +svg.attr('height') - margin.top - margin.bottom;
 const GRAPH_PAD = 20;
 const GRAPH_HEIGHT = (height - (labels.length - 1) * GRAPH_PAD) / labels.length;
 const GRAPH_OFFSET = GRAPH_HEIGHT + GRAPH_PAD;
+const MAX_DATA_POINTS = 250;
 
 function drawLines() {
   if (!window.data) {
@@ -39,7 +40,7 @@ function drawLines() {
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
   labels.forEach((_, sensorIdx) => {
     const offset = sensorIdx * GRAPH_OFFSET;
-    const xScale = d3.scaleLinear().range([0, width]).domain([0, data.eeg_buffer.length]);
+    const xScale = d3.scaleLinear().range([0, width]).domain([0, Math.min(MAX_DATA_POINTS, data.eeg_buffer.length)]);
     const yScale = d3.scaleLinear().range([offset + GRAPH_HEIGHT, offset]).domain([-1000, 1000]);
 
     const FREQ_WIDTH = 400;
@@ -75,7 +76,7 @@ function drawLines() {
         .text(labels[sensorIdx]);
 
     Object.keys(bands).forEach((band, bandIdx) => {
-      bandSize = data.bands[band][sensorIdx];
+      const bandSize = data.bands[band][sensorIdx];
       g.append('rect')
           .attr('x', xFreqScale(0))
           .attr('y', xFreqScale(bands[band][0]))
@@ -102,11 +103,15 @@ function drawLines() {
         .attr('stroke', 'green'); // Color from the predefined color scheme
 
     Object.keys(bands).forEach((band, bandIdx) => {
+      const barWidth = yFreqScale(data.bands[band][sensorIdx]);
+      const xLoc = yFreqScale(0) + 10;
+      const color = barWidth < xLoc + 10 ? "black" : "white";
       g.append("text")
           .attr("x", xFreqScale(0) + 10)
           .attr('y', .5 * (xFreqScale(bands[band][0]) + xFreqScale(bands[band][1])))
           .attr("dy", ".3em")
           .attr("dx", "1em")
+          .attr("fill", color)
           .text(bandAbbrevs[band])
     })
   });
