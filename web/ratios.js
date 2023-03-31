@@ -90,6 +90,7 @@ Object.keys(ratioGraphs).forEach(ratioID => {
         .attr('y', yScale(idx))
         .text(label)
       g.append('line')
+        .attr('class', 'ratio-line')
         .attr('y1', yScale(idx))
         .attr('y2', yScale(idx))
         .attr('x1', width / 2)

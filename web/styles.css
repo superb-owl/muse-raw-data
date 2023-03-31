@@ -1,3 +1,8 @@
+body {
+  background-color: #14101b;
+  color: #fff;
+}
+
 .column {
   width: 49%;
   display: inline-block;
@@ -5,7 +10,26 @@
   vertical-align: top;
 }
 
+#CenterOfMass {
+  display: block;
+}
+
 .line {
     fill: none;
     stroke-width: 2px;
+}
+
+text {
+  fill: #fff;
+}
+
+line {
+  stroke: #fff;
+}
+line.ratio-line {
+  stroke: steelblue;
+}
+
+rect.band {
+  fill: steelblue;
 }

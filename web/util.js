@@ -7,7 +7,7 @@ const bandOrder = [
   'gamma',
 ];
 const bandColors = {
-  delta: '#07136a',
+  delta: '#09188a',
   theta: '#0a1c9f',
   alpha: '#0d26d4',
   beta: '#2a42f0',

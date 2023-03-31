@@ -27,7 +27,7 @@ function drawCenterOfMass() {
     .attr('cx', width / 2).attr('cy', 0)
     .attr('r', 5)
     .attr('stroke', 'black')
-    .attr('fill', 'none')
+    .attr('fill', 'white')
   g.append('circle') // head
     .attr('cx', width / 2).attr('cy', height / 2)
     .attr('r', height / 2)
