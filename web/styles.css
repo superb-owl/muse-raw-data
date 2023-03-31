@@ -1,0 +1,11 @@
+.column {
+  width: 49%;
+  display: inline-block;
+  overflow: scroll;
+  vertical-align: top;
+}
+
+.line {
+    fill: none;
+    stroke-width: 2px;
+}

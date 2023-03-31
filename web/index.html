@@ -5,19 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi-line Graph</title>
     <script src="https://d3js.org/d3.v6.min.js"></script>
-    <style>
-        .line {
-            fill: none;
-            stroke-width: 2px;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <svg id="RawData" width="600" height="800"></svg>
-    <svg id="CenterOfMass" width="200" height="200"></svg>
+    <div id="Left" class="column">
+        <svg id="RawData" width="600" height="800"></svg>
+    </div>
+    <div id="Right" class="column">
+        <svg id="CenterOfMass" width="200" height="200"></svg>
+        <svg id="RightToLeft" width="400" height="400"></svg>
+    </div>
     <script src="websocket.js"></script>
     <script src="raw.js"></script>
     <script src="center-of-mass.js"></script>
+    <script src="ratios.js"></script>
     <div id="Debug"></div>
 </body>
 </html>
