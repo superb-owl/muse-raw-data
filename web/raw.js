@@ -1,33 +1,11 @@
 window.data = null;
-const labels = ['TP9', 'AF7', 'AF8', 'TP10'];
-const bandColors = {
-  delta: '#07136a',
-  theta: '#0a1c9f',
-  alpha: '#0d26d4',
-  beta: '#2a42f0',
-  gamma: '#5f71f4',
-}
-const bandAbbrevs = {
-    delta: 'δ',
-    theta: 'θ',
-    alpha: 'α',
-    beta: 'β',
-    gamma: 'γ',
-}
-const bands = {
-  delta: [1, 4],
-  theta: [4, 8],
-  alpha: [8, 12],
-  beta: [12, 30],
-  gamma: [30, 80],
-}
 const svg = d3.select('svg#RawData');
 const margin = { top: 20, right: 20, bottom: 30, left: 50 };
 const width = +svg.attr('width') - margin.left - margin.right;
 const height = +svg.attr('height') - margin.top - margin.bottom;
 
 const GRAPH_PAD = 20;
-const GRAPH_HEIGHT = (height - (labels.length - 1) * GRAPH_PAD) / labels.length;
+const GRAPH_HEIGHT = (height - (sensors.length - 1) * GRAPH_PAD) / sensors.length;
 const GRAPH_OFFSET = GRAPH_HEIGHT + GRAPH_PAD;
 const MAX_DATA_POINTS = 250;
 
@@ -38,7 +16,7 @@ function drawLines() {
   }
   svg.selectAll('g').remove();
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-  labels.forEach((_, sensorIdx) => {
+  sensors.forEach((_, sensorIdx) => {
     const offset = sensorIdx * GRAPH_OFFSET;
     const xScale = d3.scaleLinear().range([0, width]).domain([0, Math.min(MAX_DATA_POINTS, data.eeg_buffer.length)]);
     const yScale = d3.scaleLinear().range([offset + GRAPH_HEIGHT, offset]).domain([-1000, 1000]);
@@ -73,7 +51,7 @@ function drawLines() {
         .attr("dx", "-1em")
         .attr("dy", ".5em")
         .attr("y", offset + GRAPH_HEIGHT / 2)
-        .text(labels[sensorIdx]);
+        .text(sensors[sensorIdx]);
 
     Object.keys(bands).forEach((band, bandIdx) => {
       const bandSize = data.bands[band][sensorIdx];

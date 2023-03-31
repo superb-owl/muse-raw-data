@@ -60,7 +60,7 @@ function drawCenterOfMass() {
       right: 0,
     };
   })
-  labels.forEach((sensorLabel, sensorIdx) => {
+  sensors.forEach((sensorLabel, sensorIdx) => {
     const allBandsData = Object.keys(bands).map(band => data.bands[band][sensorIdx])
     adjustWeights(weights.all, allBandsData, sensorLabel);
     Object.keys(bands).forEach((band, bandIdx) => {
