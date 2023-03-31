@@ -70,16 +70,14 @@ function drawLines() {
     const lineData = data.eeg_buffer.map(d => d[sensorIdx]);
     g.append('path')
         .datum(lineData)
-        .attr('class', 'line')
+        .attr('class', 'signal-line')
         .attr('d', line)
-        .attr('stroke', d3.schemeCategory10[6]); // Color from the predefined color scheme
 
     const fftData = data.fft.map(d => d[sensorIdx]).slice(SKIP_FREQUENCIES);
     g.append('path')
         .datum(fftData)
-        .attr('class', 'line')
+        .attr('class', 'frequency-line')
         .attr('d', freqLine)
-        .attr('stroke', 'green'); // Color from the predefined color scheme
 
     Object.keys(bands).forEach((band, bandIdx) => {
       const barWidth = yFreqScale(data.bands[band][sensorIdx]);

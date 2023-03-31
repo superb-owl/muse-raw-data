@@ -15,8 +15,6 @@ body {
 }
 
 .line {
-    fill: none;
-    stroke-width: 2px;
 }
 
 text {
@@ -32,4 +30,16 @@ line.ratio-line {
 
 rect.band {
   fill: steelblue;
+}
+
+.frequency-line {
+  stroke: lightgreen;
+  stroke-width: 2px;
+  fill: none;
+}
+
+.signal-line {
+  stroke: pink;
+  stroke-width: 2px;
+  fill: none;
 }
