@@ -21,11 +21,11 @@ function drawCenterOfMass() {
   svg.selectAll('g').remove();
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
   const xScale = d3.scaleLinear().range([0, width]).domain([-100, 100]);
-  const yScale = d3.scaleLinear().range([height, 0]).domain([-100, 100]);
+  const yScale = d3.scaleLinear().range([0, height]).domain([-100, 100]);
 
   g.append('circle') // nose
     .attr('cx', width / 2).attr('cy', 0)
-    .attr('r', 5)
+    .attr('r', 15)
     .attr('stroke', 'black')
     .attr('fill', 'white')
   g.append('circle') // head
@@ -74,14 +74,14 @@ function drawCenterOfMass() {
     const total = weights[band].right + weights[band].left + weights[band].back + weights[band].front;
     g.append('circle')
       .attr('cx', xScale(xLoc)).attr('cy', yScale(yLoc))
-      .attr('r', 20 * total / 400)
+      .attr('r', 20 * total / 100)
       .attr('stroke-width', 2)
       .attr('stroke', bandColors[band])
       .attr('fill', 'none')
     g.append('text')
       .attr('x', xScale(xLoc)).attr('y', yScale(yLoc))
       .attr('dx', '-.3em')
-      .attr('font-size', Math.max(10, 20 * total / 400))
+      .attr('font-size', 15)
       .attr('stroke', 'black')
       .text(bandAbbrevs[band])
   })
