@@ -1,4 +1,4 @@
-[!Live Demo](live-monitor.gif)
+![Live Demo](live-monitor.gif)
 
 # Setup
 (This took some work, I may not have captured everything)
