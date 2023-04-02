@@ -83,11 +83,13 @@ def start_fake_eeg_loop():
     filter_state = None
     with open('fake_data.csv', 'r') as f:
         reader = csv.reader(f)
-        data = [row[1:] for row in reader]
-        data = data[1:]
+        lines = [row for row in reader][1:]
+        timestamps = [row[0] for row in lines]
+        data = [row[1:] for row in lines]
         data = [[float(x) for x in row] for row in data]
 
     cur_idx = 0
+
     try:
         while True:
             start_idx = cur_idx
@@ -96,12 +98,13 @@ def start_fake_eeg_loop():
                 cur_idx = 0
                 continue
             eeg_data = data[start_idx:end_idx]
+            timestamp = timestamps[start_idx:end_idx]
             cur_idx = end_idx
 
-            ch_data = np.array(eeg_data)
+            eeg_data = np.array(eeg_data)
 
             eeg_buffer, filter_state = update_buffer(
-                eeg_buffer, ch_data, notch=True,
+                eeg_buffer, eeg_data, notch=True,
                 filter_state=filter_state)
             time.sleep(SHIFT_LENGTH)
             print("data")
@@ -111,18 +114,24 @@ def start_fake_eeg_loop():
 def start_eeg_loop(inlet):
     global eeg_buffer
     filter_state = None
+    f = open('recording.csv', 'w')
+    recording = csv.writer(f)
     try:
         while True:
             eeg_data, timestamp = inlet.pull_chunk(
                 timeout=1, max_samples=int(SHIFT_LENGTH * sample_rate))
+            eeg_data = np.array(eeg_data)
+            timestamp = np.array([timestamp])
 
-            ch_data = np.array(eeg_data)
+            recording_data = np.concatenate((timestamp.T, eeg_data), axis=1)
+            recording.writerows(recording_data)
 
             eeg_buffer, filter_state = update_buffer(
-                eeg_buffer, ch_data, notch=True,
+                eeg_buffer, eeg_data, notch=True,
                 filter_state=filter_state)
             print("data")
     except KeyboardInterrupt:
+        f.close()
         print('Closing!')
 
 
