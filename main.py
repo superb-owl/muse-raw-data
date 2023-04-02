@@ -82,13 +82,16 @@ def start_fake_eeg_loop():
     eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
     ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
 
-    filter_state = None
+    eeg_filter_state = None
+    ppg_filter_state = None
     with open('fake_data.csv', 'r') as f:
         reader = csv.reader(f)
         lines = [row for row in reader][1:]
         timestamps = [row[0] for row in lines]
-        data = [row[1:] for row in lines]
-        data = [[float(x) for x in row] for row in data]
+        eeg_data = [row[1:6] for row in lines]
+        eeg_data = [[float(x) for x in row] for row in eeg_data]
+        ppg_data = [row[6:9] for row in lines]
+        ppg_data = [[float(x) for x in row] for row in ppg_data]
 
     cur_idx = 0
 
@@ -96,18 +99,23 @@ def start_fake_eeg_loop():
         while True:
             start_idx = cur_idx
             end_idx = start_idx + int(SHIFT_LENGTH * eeg_sample_rate)
-            if end_idx > len(data):
+            if end_idx > len(eeg_data):
                 cur_idx = 0
                 continue
-            eeg_data = data[start_idx:end_idx]
             timestamp = timestamps[start_idx:end_idx]
+            eeg_slice = eeg_data[start_idx:end_idx]
+            ppg_slice = ppg_data[start_idx:end_idx]
             cur_idx = end_idx
 
-            eeg_data = np.array(eeg_data)
+            eeg_slice = np.array(eeg_slice)
+            ppg_slice = np.array(ppg_slice)
 
-            eeg_buffer, filter_state = update_buffer(
-                eeg_buffer, eeg_data, notch=True,
-                filter_state=filter_state)
+            eeg_buffer, eeg_filter_state = update_buffer(
+                eeg_buffer, eeg_slice, notch=True,
+                filter_state=eeg_filter_state)
+            ppg_buffer, ppg_filter_state = update_buffer(
+                ppg_buffer, ppg_slice, notch=True,
+                filter_state=ppg_filter_state)
             time.sleep(SHIFT_LENGTH)
             print("data")
     except KeyboardInterrupt:
