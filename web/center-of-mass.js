@@ -78,6 +78,12 @@ function drawCenterOfMass() {
       .attr('stroke-width', 2)
       .attr('stroke', bandColors[band])
       .attr('fill', 'none')
+    g.append('text')
+      .attr('x', xScale(xLoc)).attr('y', yScale(yLoc))
+      .attr('dx', '-.3em')
+      .attr('font-size', Math.max(10, 20 * total / 400))
+      .attr('stroke', 'black')
+      .text(bandAbbrevs[band])
   })
 
   window.requestAnimationFrame(drawCenterOfMass);
