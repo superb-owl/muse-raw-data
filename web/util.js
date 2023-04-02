@@ -28,3 +28,25 @@ const bands = {
   gamma: [30, 80],
 }
 
+function getVariance(data) {
+  const avg = data.reduce((a, c) => a + c, 0.0) / data.length;
+  const avgSq = data.reduce((a, c) => a + c * c, 0.0) / data.length;
+  return avgSq - avg * avg;
+}
+
+function getHarmonicVariance(data) {
+  let totalVariance = 0.0;
+  let numHarmonics = 0;
+  for (let base = 1; base < data.length; base++) {
+    let harmonicData = [];
+    for (let harmonic = base; harmonic < data.length; harmonic = harmonic * 2) {
+      harmonicData.push(data[harmonic - 1]);
+    }
+    if (harmonicData.length > 1) {
+      totalVariance += getVariance(harmonicData);
+      numHarmonics++;
+    }
+  }
+  return totalVariance / numHarmonics;
+}
+

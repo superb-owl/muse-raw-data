@@ -1,5 +1,4 @@
-window.data = null;
-const ratioGraphs = {
+window.data = null; const ratioGraphs = {
   'RightToLeft': {
     dimension: 'bands',
     a: 'left',
@@ -15,6 +14,11 @@ const ratioGraphs = {
     a: 'gamma',
     b: 'delta',
   },
+  'Harmonics': {
+    dimension: 'sensors',
+    a: 'harmonic',
+    b: 'chaos',
+  }
 };
 
 function getPower(data, direction) {
@@ -68,13 +72,18 @@ Object.keys(ratioGraphs).forEach(ratioID => {
     let bs = [];
     let labels = [];
     if (settings.dimension === 'bands') {
+      labels = bandOrder.map(band => bandAbbrevs[band]);
       as = bandOrder.map(band => getPower(data.bands[band], settings.a));
       bs = bandOrder.map(band => getPower(data.bands[band], settings.b));
-      labels = bandOrder.map(band => bandAbbrevs[band]);
     } else if (settings.dimension === 'sensors') {
-      as = sensors.map((sensor, sensorIdx) => data.bands[settings.a][sensorIdx])
-      bs = sensors.map((sensor, sensorIdx) => data.bands[settings.b][sensorIdx])
       labels = sensors;
+      if (settings.a === 'harmonic') {
+        as = sensors.map((sensor, sensorIdx) => getVariance(data.fft.map(d => d[sensorIdx])));
+        bs = sensors.map((sensor, sensorIdx) => getHarmonicVariance(data.fft.map(d => d[sensorIdx])));
+      } else {
+        as = sensors.map((sensor, sensorIdx) => data.bands[settings.a][sensorIdx])
+        bs = sensors.map((sensor, sensorIdx) => data.bands[settings.b][sensorIdx])
+      }
     } else {
       throw new Error("Unknown dimension " + settings.dimension);
     }
