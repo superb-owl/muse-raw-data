@@ -10,13 +10,6 @@ body {
   vertical-align: top;
 }
 
-#CenterOfMass {
-  display: block;
-}
-
-.line {
-}
-
 text {
   fill: #fff;
 }
@@ -30,6 +23,11 @@ line.ratio-line {
 
 rect.band {
   fill: steelblue;
+}
+
+.heartbeat-line {
+  stroke-width: 2px;
+  fill: none;
 }
 
 .frequency-line {

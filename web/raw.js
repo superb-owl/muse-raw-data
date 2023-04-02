@@ -91,7 +91,7 @@ function drawLines() {
           .text(bandAbbrevs[band])
     })
   });
-  document.getElementById('Debug').innerHTML = `Sample rate: ${data.sample_rate} samples/sec`;
+  document.getElementById('Debug').innerHTML = `Sample rate: ${data.eeg_sample_rate} samples/sec`;
   window.requestAnimationFrame(drawLines);
 }
 window.requestAnimationFrame(drawLines);

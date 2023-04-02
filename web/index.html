@@ -10,18 +10,24 @@
 <body>
     <div id="Left" class="column">
         <svg id="RawData" width="600" height="800"></svg>
+        <svg id="Heartbeat" width="600" height="200"></svg>
     </div>
     <div id="Right" class="column">
-        <svg id="CenterOfMass" width="400" height="400"></svg>
-        <svg id="RightToLeft" width="200" height="200"></svg>
-        <svg id="FrontToBack" width="200" height="200"></svg>
-        <svg id="DeltaToGamma" width="200" height="200"></svg>
-        <svg id="Harmonics" width="200" height="200"></svg>
+        <div>
+            <svg id="CenterOfMass" width="400" height="400"></svg>
+        </div>
+        <div>
+            <svg id="RightToLeft" width="200" height="200"></svg>
+            <svg id="FrontToBack" width="200" height="200"></svg>
+            <svg id="DeltaToGamma" width="200" height="200"></svg>
+            <svg id="Harmonics" width="200" height="200"></svg>
+        </div>
     </div>
     <script src="util.js"></script>
     <script src="websocket.js"></script>
     <script src="raw.js"></script>
     <script src="center-of-mass.js"></script>
+    <script src="heartbeat.js"></script>
     <script src="ratios.js"></script>
     <div id="Debug"></div>
 </body>
