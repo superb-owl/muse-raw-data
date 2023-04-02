@@ -10,6 +10,7 @@ from muselsl import stream, list_muses
 from pylsl import StreamInlet, resolve_byprop
 
 from scipy.signal import butter, lfilter, lfilter_zi
+from scipy.ndimage import interpolation
 
 NOTCH_B, NOTCH_A = butter(4, np.array([55, 65]) / (256 / 2), btype='bandstop')
 
@@ -19,7 +20,8 @@ class Band:
     Alpha = 2
     Beta = 3
 
-NUM_BANDS = 5
+NUM_EEG_SENSORS = 5
+NUM_PPG_SENSORS = 3
 
 """ EXPERIMENTAL PARAMETERS """
 # Modify these to change aspects of the signal processing
@@ -32,18 +34,16 @@ BUFFER_LENGTH = 2
 EPOCH_LENGTH = 1
 
 # Amount of overlap between two consecutive epochs (in seconds)
-OVERLAP_LENGTH = 0.8
+OVERLAP_LENGTH = 0.75
 
 # Amount to 'shift' the start of each next consecutive epoch
+# NOTE: this should evenly divide all the sample rates
 SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
 
-# Index of the channel(s) (electrodes) to be used
-# 0 = left ear, 1 = left forehead, 2 = right forehead, 3 = right ear
-INDEX_CHANNEL = [0]
-
-sample_rate = 256 # Will be set explicitly below, in case it's different
-eeg_buffer = np.zeros((int(sample_rate * BUFFER_LENGTH), NUM_BANDS))
-
+eeg_sample_rate = 256 # Will be set explicitly below, in case it's different
+ppg_sample_rate = 64  # Will be set explicitly below, in case it's different
+eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
+ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
 
 def start_stream():
     muses = list_muses()
@@ -52,34 +52,36 @@ def start_stream():
     print("done streaming")
 
 def pull_eeg_data():
-    global eeg_buffer
-    global sample_rate
-    streams = []
-    while len(streams) == 0:
+    global eeg_sample_rate
+    global ppg_sample_rate
+    eeg_streams = []
+    ppg_streams = []
+    while len(eeg_streams) == 0 or len(ppg_streams) == 0:
         print("Waiting for streams...")
         time.sleep(1)
-        streams = resolve_byprop('type', 'EEG', timeout=2)
-    print("got streams", len(streams))
+        eeg_streams = resolve_byprop('type', 'EEG', timeout=2)
+        ppg_streams = resolve_byprop('type', 'PPG', timeout=2)
+    print("got streams", len(eeg_streams), len(ppg_streams))
 
-    inlet = StreamInlet(streams[0], max_chunklen=12)
-    eeg_time_correction = inlet.time_correction()
-
-    # Get the stream info and description
-    info = inlet.info()
-    description = info.desc()
+    eeg_inlet = StreamInlet(eeg_streams[0], max_chunklen=12)
+    ppg_inlet = StreamInlet(ppg_streams[0], max_chunklen=12)
 
     # Get the sampling frequency
     # This is an important value that represents how many EEG data points are
     # collected in a second. This influences our frequency band calculation.
     # for the Muse 2016, this should always be 256
-    sample_rate = int(info.nominal_srate())
-    eeg_buffer = np.zeros((int(sample_rate * BUFFER_LENGTH), NUM_BANDS))
+    print("sample rates", eeg_inlet.info().nominal_srate(), ppg_inlet.info().nominal_srate())
+    eeg_sample_rate = int(eeg_inlet.info().nominal_srate())
+    ppg_sample_rate = int(ppg_inlet.info().nominal_srate())
 
-    start_eeg_loop(inlet)
-
+    start_eeg_loop(eeg_inlet, ppg_inlet)
 
 def start_fake_eeg_loop():
     global eeg_buffer
+    global ppg_buffer
+    eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
+    ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
+
     filter_state = None
     with open('fake_data.csv', 'r') as f:
         reader = csv.reader(f)
@@ -93,7 +95,7 @@ def start_fake_eeg_loop():
     try:
         while True:
             start_idx = cur_idx
-            end_idx = start_idx + int(SHIFT_LENGTH * sample_rate)
+            end_idx = start_idx + int(SHIFT_LENGTH * eeg_sample_rate)
             if end_idx > len(data):
                 cur_idx = 0
                 continue
@@ -111,29 +113,45 @@ def start_fake_eeg_loop():
     except KeyboardInterrupt:
         print('Closing!')
 
-def start_eeg_loop(inlet):
+def start_eeg_loop(eeg_inlet, ppg_inlet):
     global eeg_buffer
-    filter_state = None
+    global ppg_buffer
+    eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
+    ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
+
+    eeg_filter_state = None
+    ppg_filter_state = None
     f = open('recording.csv', 'w')
     recording = csv.writer(f)
     try:
         while True:
-            eeg_data, timestamp = inlet.pull_chunk(
-                timeout=1, max_samples=int(SHIFT_LENGTH * sample_rate))
+            ppg_data, ppg_timestamp = ppg_inlet.pull_chunk(
+                timeout=1, max_samples=int(SHIFT_LENGTH * ppg_sample_rate))
+            eeg_data, eeg_timestamp = eeg_inlet.pull_chunk(
+                timeout=1, max_samples=int(SHIFT_LENGTH * eeg_sample_rate))
+            ppg_data = np.array(ppg_data)
             eeg_data = np.array(eeg_data)
-            timestamp = np.array([timestamp])
-
-            recording_data = np.concatenate((timestamp.T, eeg_data), axis=1)
+            # Don't try to sync timestamps--just collate the data
+            # TODO: can try and sync timestamps, but probably hard to do. Off by ~200ms right now
+            # print("PPG", ppg_timestamp[0], ppg_timestamp[-1])
+            # print("EEG", eeg_timestamp[0], eeg_timestamp[-1])
+            ppg_data_big = interpolation.zoom(ppg_data, (len(eeg_data) / len(ppg_data), 1.0))
+            eeg_timestamp = np.array([eeg_timestamp]).T
+            recording_data = np.concatenate((eeg_timestamp, eeg_data, ppg_data_big), axis=1)
             recording.writerows(recording_data)
 
-            eeg_buffer, filter_state = update_buffer(
-                eeg_buffer, eeg_data, notch=True,
-                filter_state=filter_state)
+            eeg_buffer, eeg_filter_state = update_buffer(
+                eeg_buffer, eeg_data,
+                notch=True,
+                filter_state=eeg_filter_state)
+            ppg_buffer, ppg_filter_state = update_buffer(
+                ppg_buffer, ppg_data,
+                notch=False,
+                filter_state=ppg_filter_state)
             print("data")
     except KeyboardInterrupt:
         f.close()
         print('Closing!')
-
 
 def update_buffer(data_buffer, new_data, notch=False, filter_state=None):
     """
@@ -181,7 +199,7 @@ def compute_fft(data):
     NFFT = nextpow2(winSampleLength)
     Y = np.fft.fft(dataWinCenteredHam, n=NFFT, axis=0) / winSampleLength
     PSD = 2 * np.abs(Y[0:int(NFFT / 2), :])
-    freq_buckets = sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
+    freq_buckets = eeg_sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
     f = freq_buckets
 
     bands = {
@@ -200,11 +218,13 @@ async def websocket_handler(websocket, path):
     while True:
         fft, buckets, bands = compute_fft(eeg_buffer)
         data = json.dumps({
-            'sample_rate': sample_rate,
+            'eeg_sample_rate': eeg_sample_rate,
+            'ppg_sample_rate': ppg_sample_rate,
+            'eeg_buffer': eeg_buffer.tolist(),
+            'ppg_buffer': ppg_buffer.tolist(),
             'fft': fft.tolist(),
             'frequency_buckets': buckets.tolist(),
             'bands': bands,
-            'eeg_buffer': eeg_buffer.tolist(),
         })
         try:
             await websocket.send(data)
