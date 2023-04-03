@@ -31,13 +31,13 @@ NUM_PPG_SENSORS = 3
 BUFFER_LENGTH = 10
 
 # Length of the epochs used to compute the FFT (in seconds)
-EPOCH_LENGTH = 1
+EPOCH_LENGTH = 5
 
 # Amount of overlap between two consecutive epochs (in seconds)
-OVERLAP_LENGTH = 0.75
+OVERLAP_LENGTH = 1
 
 # Amount to 'shift' the start of each next consecutive epoch
-# NOTE: this should evenly divide all the sample rates
+# NOTE: SHIFT_LENGTH * sample_rate should be an integer
 SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
 
 eeg_sample_rate = 256 # Will be set explicitly below, in case it's different

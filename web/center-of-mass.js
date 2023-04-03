@@ -19,9 +19,10 @@ function drawCenterOfMass() {
     return;
   }
   svg.selectAll('g').remove();
+  const rangeSize = 30;
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-  const xScale = d3.scaleLinear().range([0, width]).domain([-100, 100]);
-  const yScale = d3.scaleLinear().range([0, height]).domain([-100, 100]);
+  const xScale = d3.scaleLinear().range([0, width]).domain([-rangeSize, rangeSize]);
+  const yScale = d3.scaleLinear().range([0, height]).domain([-rangeSize, rangeSize]);
 
   g.append('circle') // nose
     .attr('cx', width / 2).attr('cy', 0)
@@ -81,7 +82,7 @@ function drawCenterOfMass() {
     g.append('text')
       .attr('x', xScale(xLoc)).attr('y', yScale(yLoc))
       .attr('dx', '-.3em')
-      .attr('font-size', 15)
+      .attr('font-size', 20)
       .attr('stroke', 'black')
       .text(bandAbbrevs[band])
   })

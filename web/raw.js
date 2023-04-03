@@ -7,7 +7,7 @@ const height = +svg.attr('height') - margin.top - margin.bottom;
 const GRAPH_PAD = 20;
 const GRAPH_HEIGHT = (height - (sensors.length - 1) * GRAPH_PAD) / sensors.length;
 const GRAPH_OFFSET = GRAPH_HEIGHT + GRAPH_PAD;
-const MAX_DATA_POINTS = 250;
+const MAX_DATA_POINTS = 5000;
 
 function drawLines() {
   if (!window.data) {
@@ -19,7 +19,7 @@ function drawLines() {
   sensors.forEach((_, sensorIdx) => {
     const offset = sensorIdx * GRAPH_OFFSET;
     const xScale = d3.scaleLinear().range([0, width]).domain([0, Math.min(MAX_DATA_POINTS, data.eeg_buffer.length)]);
-    const yScale = d3.scaleLinear().range([offset + GRAPH_HEIGHT, offset]).domain([-1000, 1000]);
+    const yScale = d3.scaleLinear().range([offset + GRAPH_HEIGHT, offset]).domain(d3.extent(data.eeg_buffer.flat()))
 
     const FREQ_WIDTH = 400;
     const SKIP_FREQUENCIES = 2; // exclude the 0 frequency due to log10 issues...what is that?
