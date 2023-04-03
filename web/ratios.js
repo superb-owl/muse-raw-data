@@ -73,16 +73,16 @@ Object.keys(ratioGraphs).forEach(ratioID => {
     let labels = [];
     if (settings.dimension === 'bands') {
       labels = bandOrder.map(band => bandAbbrevs[band]);
-      as = bandOrder.map(band => getPower(data.bands[band], settings.a));
-      bs = bandOrder.map(band => getPower(data.bands[band], settings.b));
+      as = bandOrder.map(band => getPower(data.eeg_bands[band], settings.a));
+      bs = bandOrder.map(band => getPower(data.eeg_bands[band], settings.b));
     } else if (settings.dimension === 'sensors') {
       labels = sensors;
       if (settings.a === 'harmonic') {
-        as = sensors.map((sensor, sensorIdx) => getVariance(data.fft.map(d => d[sensorIdx])));
-        bs = sensors.map((sensor, sensorIdx) => getHarmonicVariance(data.fft.map(d => d[sensorIdx])));
+        as = sensors.map((sensor, sensorIdx) => getVariance(data.eeg_fft.map(d => d[sensorIdx])));
+        bs = sensors.map((sensor, sensorIdx) => getHarmonicVariance(data.eeg_fft.map(d => d[sensorIdx])));
       } else {
-        as = sensors.map((sensor, sensorIdx) => data.bands[settings.a][sensorIdx])
-        bs = sensors.map((sensor, sensorIdx) => data.bands[settings.b][sensorIdx])
+        as = sensors.map((sensor, sensorIdx) => data.eeg_bands[settings.a][sensorIdx])
+        bs = sensors.map((sensor, sensorIdx) => data.eeg_bands[settings.b][sensorIdx])
       }
     } else {
       throw new Error("Unknown dimension " + settings.dimension);

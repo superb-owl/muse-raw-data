@@ -23,8 +23,8 @@ function drawLines() {
 
     const FREQ_WIDTH = 400;
     const SKIP_FREQUENCIES = 2; // exclude the 0 frequency due to log10 issues...what is that?
-    const freqDomain = [data.frequency_buckets[SKIP_FREQUENCIES], data.frequency_buckets[data.frequency_buckets.length - 1]];
-    const freqRange = d3.extent(data.fft.flat())
+    const freqDomain = [data.eeg_frequency_buckets[SKIP_FREQUENCIES], data.eeg_frequency_buckets[data.eeg_frequency_buckets.length - 1]];
+    const freqRange = d3.extent(data.eeg_fft.flat())
 
     const xFreqScale = d3.scaleLog()
       .domain(freqDomain)                     // domain refers to the x of the data
@@ -34,7 +34,7 @@ function drawLines() {
       .range([0, FREQ_WIDTH])                 // range refers to the x of the (inverted) svg coordinates
 
     const freqLine = d3.line() // these x, y refer to svg coordinates. y coord maps to x coord of data
-        .y((d, i) => xFreqScale(data.frequency_buckets[i + SKIP_FREQUENCIES]))
+        .y((d, i) => xFreqScale(data.eeg_frequency_buckets[i + SKIP_FREQUENCIES]))
         .x(d => yFreqScale(d));
 
     const xAxis = g.append('g')
@@ -54,7 +54,7 @@ function drawLines() {
         .text(sensors[sensorIdx]);
 
     Object.keys(bands).forEach((band, bandIdx) => {
-      const bandSize = data.bands[band][sensorIdx];
+      const bandSize = data.eeg_bands[band][sensorIdx];
       g.append('rect')
           .attr('class', 'band')
           .attr('x', yFreqScale(0))
@@ -73,14 +73,14 @@ function drawLines() {
         .attr('class', 'signal-line')
         .attr('d', line)
 
-    const fftData = data.fft.map(d => d[sensorIdx]).slice(SKIP_FREQUENCIES);
+    const fftData = data.eeg_fft.map(d => d[sensorIdx]).slice(SKIP_FREQUENCIES);
     g.append('path')
         .datum(fftData)
         .attr('class', 'frequency-line')
         .attr('d', freqLine)
 
     Object.keys(bands).forEach((band, bandIdx) => {
-      const barWidth = yFreqScale(data.bands[band][sensorIdx]);
+      const barWidth = yFreqScale(data.eeg_bands[band][sensorIdx]);
       const xLoc = yFreqScale(0);
       g.append("text")
           .attr("x", yFreqScale(0))

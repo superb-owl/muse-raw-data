@@ -61,10 +61,10 @@ function drawCenterOfMass() {
     };
   })
   sensors.forEach((sensorLabel, sensorIdx) => {
-    const allBandsData = Object.keys(bands).map(band => data.bands[band][sensorIdx])
+    const allBandsData = Object.keys(bands).map(band => data.eeg_bands[band][sensorIdx])
     adjustWeights(weights.all, allBandsData, sensorLabel);
     Object.keys(bands).forEach((band, bandIdx) => {
-      const bandData = [data.bands[band][sensorIdx]];
+      const bandData = [data.eeg_bands[band][sensorIdx]];
       adjustWeights(weights[band], bandData, sensorLabel);
     });
   });

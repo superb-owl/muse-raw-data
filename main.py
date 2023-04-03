@@ -196,7 +196,7 @@ def get_band(start, end, f, PSD):
     # Max seems like the best measure IMO--no penalty for a tight peak
     return np.max(PSD[np.where((f >= start) & (f < end)), :], axis=1)[0]
 
-def compute_fft(data):
+def compute_fft(data, sample_rate):
     winSampleLength, nbCh = data.shape
 
     # Apply Hamming window
@@ -207,7 +207,7 @@ def compute_fft(data):
     NFFT = nextpow2(winSampleLength)
     Y = np.fft.fft(dataWinCenteredHam, n=NFFT, axis=0) / winSampleLength
     PSD = 2 * np.abs(Y[0:int(NFFT / 2), :])
-    freq_buckets = eeg_sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
+    freq_buckets = sample_rate / 2 * np.linspace(0, 1, int(NFFT / 2))
     f = freq_buckets
 
     bands = {
@@ -222,17 +222,19 @@ def compute_fft(data):
 
 # WebSocket server handler function
 async def websocket_handler(websocket, path):
-    global eeg_buffer
     while True:
-        fft, buckets, bands = compute_fft(eeg_buffer)
+        fft, buckets, bands = compute_fft(eeg_buffer, eeg_sample_rate)
+        ppg_fft, ppg_buckets, _ = compute_fft(ppg_buffer, ppg_sample_rate)
         data = json.dumps({
             'eeg_sample_rate': eeg_sample_rate,
             'ppg_sample_rate': ppg_sample_rate,
             'eeg_buffer': eeg_buffer.tolist(),
             'ppg_buffer': ppg_buffer.tolist(),
-            'fft': fft.tolist(),
-            'frequency_buckets': buckets.tolist(),
-            'bands': bands,
+            'ppg_fft': ppg_fft.tolist(),
+            'ppg_frequency_buckets': ppg_buckets.tolist(),
+            'eeg_fft': fft.tolist(),
+            'eeg_frequency_buckets': buckets.tolist(),
+            'eeg_bands': bands,
         })
         try:
             await websocket.send(data)
