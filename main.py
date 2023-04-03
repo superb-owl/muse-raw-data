@@ -28,7 +28,7 @@ NUM_PPG_SENSORS = 3
 
 # Length of the EEG data buffer (in seconds)
 # This buffer will hold last n seconds of data and be used for calculations
-BUFFER_LENGTH = 2
+BUFFER_LENGTH = 10
 
 # Length of the epochs used to compute the FFT (in seconds)
 EPOCH_LENGTH = 1
@@ -240,6 +240,7 @@ async def websocket_handler(websocket, path):
             await websocket.send(data)
         except Exception as e:
             break
+        time.sleep(OVERLAP_LENGTH)
 
 # Function to start the WebSocket server
 async def start_server():
