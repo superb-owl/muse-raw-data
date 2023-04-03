@@ -40,6 +40,52 @@ function drawHeartbeat() {
         .attr('stroke', colors[sensor]);
   }
 
+  const START_FREQ = 1;
+  const END_FREQ = 6;
+  const freqDomain = [data.ppg_frequency_buckets[START_FREQ], data.ppg_frequency_buckets[START_FREQ + END_FREQ]];
+  const freqRange = d3.extent(data.ppg_fft.map(d => d[0]));
+  const FREQ_WIDTH = 400;
+
+  const xFreqScale = d3.scaleLog()
+    .domain(freqDomain)                     // domain refers to the x of the data
+    .range([0, height])                     // range refers to the y of the (inverted) svg coordinates
+  const yFreqScale = d3.scaleLinear()
+    .domain(freqRange)                      // domain refers to the y of the data
+    .range([0, FREQ_WIDTH])                 // range refers to the x of the (inverted) svg coordinates
+
+  const yAxis = g.append('g')
+      .call(
+        // Skip some ticks to make the graph more readable
+        d3.axisLeft(xFreqScale).tickFormat((x, i) => `${x.toFixed(1)}Hz`)
+      );
+  const freqLine = d3.line() // these x, y refer to svg coordinates. y coord maps to x coord of data
+      .y((d, i) => xFreqScale(data.ppg_frequency_buckets[START_FREQ + i]))
+      .x(d => yFreqScale(d));
+
+  const fftData = data.ppg_fft.map(d => d[0]).slice(START_FREQ, END_FREQ);
+  g.append('path')
+      .datum(fftData)
+      .attr('class', 'frequency-line')
+      .attr('d', freqLine)
+
+  let heartrate = 0.0;
+  let total = 0.0;
+  fftData.forEach((amt, idx) => {
+    const freq = data.ppg_frequency_buckets[START_FREQ + idx];
+    heartrate += freq * amt;
+    total += amt;
+  });
+
+  heartrate /= total;
+  g.append("text")
+      .attr("class", "y label")
+      .attr("text-anchor", "end")
+      .attr("dx", "1em")
+      .attr("dy", "1em")
+      .attr("x", width)
+      .attr("y", 0)
+      .text((heartrate * 60).toFixed(1) + "bpm")
+
   /*
   const now = new Date().getTime();
   const msPassed = now - lastTime;
