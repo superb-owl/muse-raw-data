@@ -1,5 +1,5 @@
 import numpy as np
-import util
+import lib.util as util
 
 def compute_fft(data, sample_rate):
     winSampleLength, nbCh = data.shape

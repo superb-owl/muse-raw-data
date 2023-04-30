@@ -6,7 +6,7 @@ from pylsl import StreamInlet, resolve_byprop
 from scipy.ndimage import interpolation
 
 import lib.util as util
-
+from lib.fft import compute_fft
 
 class Band:
     Delta = 0
@@ -148,3 +148,18 @@ def start_eeg_loop(eeg_inlet, ppg_inlet):
     except KeyboardInterrupt:
         f.close()
         print('Closing!')
+
+def get_data():
+    fft, buckets, bands = compute_fft(eeg_buffer, eeg_sample_rate)
+    ppg_fft, ppg_buckets, _ = compute_fft(ppg_buffer, ppg_sample_rate)
+    return {
+        'eeg_sample_rate': eeg_sample_rate,
+        'ppg_sample_rate': ppg_sample_rate,
+        'eeg_buffer': eeg_buffer.tolist(),
+        'ppg_buffer': ppg_buffer.tolist(),
+        'ppg_fft': ppg_fft.tolist(),
+        'ppg_frequency_buckets': ppg_buckets.tolist(),
+        'eeg_fft': fft.tolist(),
+        'eeg_frequency_buckets': buckets.tolist(),
+        'eeg_bands': bands,
+    }
