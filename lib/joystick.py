@@ -42,7 +42,7 @@ def maybe_listen_to_joystick():
                     # Read the joystick axis values
                     x_axis = joystick.get_axis(0)
                     y_axis = joystick.get_axis(1)
-                    joystick_buffer = np.roll(joystick_buffer, -1)
+                    joystick_buffer = np.roll(joystick_buffer, -1, axis=0)
                     joystick_buffer[-1] = np.array([x_axis, y_axis])
                 elif event.type == pygame.JOYBUTTONDOWN:
                     # Read the button that was pressed

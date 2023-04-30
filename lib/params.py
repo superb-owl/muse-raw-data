@@ -1,3 +1,5 @@
+import os
+
 NUM_EEG_SENSORS = 5
 NUM_PPG_SENSORS = 3
 
@@ -13,6 +15,11 @@ EPOCH_LENGTH = 5
 
 # Amount of overlap between two consecutive epochs (in seconds)
 OVERLAP_LENGTH = 1
+
+if os.getenv("FAST") == "true":
+    BUFFER_LENGTH = 2
+    EPOCH_LENGTH = 1
+    OVERLAP_LENGTH = .5
 
 # Amount to 'shift' the start of each next consecutive epoch
 # NOTE: SHIFT_LENGTH * sample_rate should be an integer

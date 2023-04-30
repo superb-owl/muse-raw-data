@@ -22,7 +22,7 @@ function drawJoystick() {
       .call(d3.axisBottom(xScale));
   for (let joystickAxis = 0; joystickAxis < 2; joystickAxis++) {
     const lineData = data.joystick_buffer.map(d => d[joystickAxis]);
-    const yScale = d3.scaleLinear().range([height, 0]).domain([-1, 1]);
+    const yScale = d3.scaleLinear().range([height, 0]).domain([1, -1]);
     const line = d3.line()
         .x((d, i) => xScale(i))
         .y(d => yScale(d));
