@@ -13,7 +13,6 @@ function drawJoystick() {
     window.requestAnimationFrame(drawJoystick);
     return;
   }
-  console.log('draw js', data.joystick_buffer);
   svg.selectAll('g').remove();
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
   const xScale = d3.scaleLinear().range([0, width]).domain([0, data.joystick_buffer.length])
@@ -33,13 +32,12 @@ function drawJoystick() {
         .attr('stroke', colors[joystickAxis]);
   }
 
-    /*
-  const START_FREQ = 0.5;
-  const END_FREQ = 10.0;
-  const START_FREQ_BUCKET = data.ppg_frequency_buckets.findIndex(f => f >= START_FREQ);
-  const END_FREQ_BUCKET = data.ppg_frequency_buckets.findLastIndex(f => f <= END_FREQ);
-  const freqDomain = [data.ppg_frequency_buckets[START_FREQ_BUCKET], data.ppg_frequency_buckets[START_FREQ_BUCKET + END_FREQ_BUCKET]];
-  const freqRange = d3.extent(data.ppg_fft.map(d => d[0]));
+  const START_FREQ = 0.25;
+  const END_FREQ = 6.0;
+  const START_FREQ_BUCKET = data.joystick_frequency_buckets.findIndex(f => f >= START_FREQ);
+  const END_FREQ_BUCKET = data.joystick_frequency_buckets.findLastIndex(f => f <= END_FREQ);
+  const freqDomain = [data.joystick_frequency_buckets[START_FREQ_BUCKET], data.joystick_frequency_buckets[START_FREQ_BUCKET + END_FREQ_BUCKET]];
+  const freqRange = d3.extent(data.joystick_fft.map(d => d[0]));
   const FREQ_WIDTH = 400;
 
   const xFreqScale = d3.scaleLog()
@@ -55,34 +53,15 @@ function drawJoystick() {
         d3.axisLeft(xFreqScale).tickFormat((x, i) => `${x.toFixed(1)}Hz`)
       );
   const freqLine = d3.line() // these x, y refer to svg coordinates. y coord maps to x coord of data
-      .y((d, i) => xFreqScale(data.ppg_frequency_buckets[START_FREQ_BUCKET + i]))
+      .y((d, i) => xFreqScale(data.joystick_frequency_buckets[START_FREQ_BUCKET + i]))
       .x(d => yFreqScale(d));
 
-  const fftData = data.ppg_fft.map(d => d[0]).slice(START_FREQ_BUCKET, END_FREQ_BUCKET);
+  const fftData = data.joystick_fft.map(d => d[0]).slice(START_FREQ_BUCKET, END_FREQ_BUCKET);
   g.append('path')
       .datum(fftData)
       .attr('class', 'frequency-line')
       .attr('d', freqLine)
 
-  let heartrate = 0.0;
-  let total = 0.0;
-  fftData.forEach((amt, idx) => {
-    const freq = data.ppg_frequency_buckets[START_FREQ_BUCKET + idx];
-    heartrate += freq * amt;
-    total += amt;
-  });
-
-  heartrate /= total;
-  g.append("text")
-      .attr("class", "y label")
-      .attr("text-anchor", "end")
-      .attr("dx", "1em")
-      .attr("dy", "1em")
-      .attr("x", width)
-      .attr("y", 0)
-      .text((heartrate * 60).toFixed(1) + "bpm")
-
-    */
   window.requestAnimationFrame(drawJoystick);
 }
 window.requestAnimationFrame(drawJoystick);

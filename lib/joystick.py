@@ -2,6 +2,7 @@ import pygame
 import time
 import numpy as np
 import lib.params as params
+from lib.fft import compute_fft
 
 NUM_AXES = 2
 joystick_buffer = np.zeros((int(params.JOYSTICK_SAMPLE_RATE_HZ * params.BUFFER_LENGTH), NUM_AXES))
@@ -50,6 +51,9 @@ def maybe_listen_to_joystick():
                     print("Button pressed:", button)
 
 def get_data():
+    fft, buckets, bands = compute_fft(joystick_buffer, params.JOYSTICK_SAMPLE_RATE_HZ)
     return {
         'joystick_buffer': joystick_buffer.tolist(),
+        'joystick_fft': fft.tolist(),
+        'joystick_frequency_buckets': buckets.tolist(),
     }
