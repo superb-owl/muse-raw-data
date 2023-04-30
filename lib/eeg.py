@@ -5,6 +5,7 @@ from muselsl import stream, list_muses
 from pylsl import StreamInlet, resolve_byprop
 from scipy.ndimage import interpolation
 
+import lib.params as params
 import lib.util as util
 from lib.fft import compute_fft
 
@@ -14,30 +15,11 @@ class Band:
     Alpha = 2
     Beta = 3
 
-NUM_EEG_SENSORS = 5
-NUM_PPG_SENSORS = 3
-
-""" EXPERIMENTAL PARAMETERS """
-# Modify these to change aspects of the signal processing
-
-# Length of the EEG data buffer (in seconds)
-# This buffer will hold last n seconds of data and be used for calculations
-BUFFER_LENGTH = 10
-
-# Length of the epochs used to compute the FFT (in seconds)
-EPOCH_LENGTH = 5
-
-# Amount of overlap between two consecutive epochs (in seconds)
-OVERLAP_LENGTH = 1
-
-# Amount to 'shift' the start of each next consecutive epoch
-# NOTE: SHIFT_LENGTH * sample_rate should be an integer
-SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
-
 eeg_sample_rate = 256 # Will be set explicitly below, in case it's different
 ppg_sample_rate = 64  # Will be set explicitly below, in case it's different
-eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
-ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
+
+eeg_buffer = np.zeros((int(eeg_sample_rate * params.BUFFER_LENGTH), params.NUM_EEG_SENSORS))
+ppg_buffer = np.zeros((int(ppg_sample_rate * params.BUFFER_LENGTH), params.NUM_PPG_SENSORS))
 
 def pull_eeg_data():
     global eeg_sample_rate
@@ -67,8 +49,8 @@ def pull_eeg_data():
 def start_fake_eeg_loop():
     global eeg_buffer
     global ppg_buffer
-    eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
-    ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
+    eeg_buffer = np.zeros((int(eeg_sample_rate * params.BUFFER_LENGTH), params.NUM_EEG_SENSORS))
+    ppg_buffer = np.zeros((int(ppg_sample_rate * params.BUFFER_LENGTH), params.NUM_PPG_SENSORS))
 
     eeg_filter_state = None
     ppg_filter_state = None
@@ -86,7 +68,7 @@ def start_fake_eeg_loop():
     try:
         while True:
             start_idx = cur_idx
-            end_idx = start_idx + int(SHIFT_LENGTH * eeg_sample_rate)
+            end_idx = start_idx + int(params.SHIFT_LENGTH * eeg_sample_rate)
             if end_idx > len(eeg_data):
                 cur_idx = 0
                 continue
@@ -104,7 +86,7 @@ def start_fake_eeg_loop():
             ppg_buffer, ppg_filter_state = util.update_buffer(
                 ppg_buffer, ppg_slice, notch=True,
                 filter_state=ppg_filter_state)
-            time.sleep(SHIFT_LENGTH)
+            time.sleep(params.SHIFT_LENGTH)
             print("data")
     except KeyboardInterrupt:
         print('Closing!')
@@ -112,8 +94,8 @@ def start_fake_eeg_loop():
 def start_eeg_loop(eeg_inlet, ppg_inlet):
     global eeg_buffer
     global ppg_buffer
-    eeg_buffer = np.zeros((int(eeg_sample_rate * BUFFER_LENGTH), NUM_EEG_SENSORS))
-    ppg_buffer = np.zeros((int(ppg_sample_rate * BUFFER_LENGTH), NUM_PPG_SENSORS))
+    eeg_buffer = np.zeros((int(eeg_sample_rate * params.BUFFER_LENGTH), params.NUM_EEG_SENSORS))
+    ppg_buffer = np.zeros((int(ppg_sample_rate * params.BUFFER_LENGTH), params.NUM_PPG_SENSORS))
 
     eeg_filter_state = None
     ppg_filter_state = None
@@ -122,9 +104,9 @@ def start_eeg_loop(eeg_inlet, ppg_inlet):
     try:
         while True:
             ppg_data, ppg_timestamp = ppg_inlet.pull_chunk(
-                timeout=1, max_samples=int(SHIFT_LENGTH * ppg_sample_rate))
+                timeout=1, max_samples=int(params.SHIFT_LENGTH * ppg_sample_rate))
             eeg_data, eeg_timestamp = eeg_inlet.pull_chunk(
-                timeout=1, max_samples=int(SHIFT_LENGTH * eeg_sample_rate))
+                timeout=1, max_samples=int(params.SHIFT_LENGTH * eeg_sample_rate))
             ppg_data = np.array(ppg_data)
             eeg_data = np.array(eeg_data)
             # Don't try to sync timestamps--just collate the data
