@@ -51,5 +51,5 @@ def maybe_listen_to_joystick():
 
 def get_data():
     return {
-        'joystick': joystick_buffer.tolist(),
+        'joystick_buffer': joystick_buffer.tolist(),
     }
