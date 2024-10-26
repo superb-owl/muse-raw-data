@@ -118,11 +118,11 @@ def start_eeg_loop(eeg_inlet, ppg_inlet):
             recording_data = np.concatenate((eeg_timestamp, eeg_data, ppg_data_big), axis=1)
             recording.writerows(recording_data)
 
-            eeg_buffer, eeg_filter_state = update_buffer(
+            eeg_buffer, eeg_filter_state = util.update_buffer(
                 eeg_buffer, eeg_data,
                 notch=True,
                 filter_state=eeg_filter_state)
-            ppg_buffer, ppg_filter_state = update_buffer(
+            ppg_buffer, ppg_filter_state = util.update_buffer(
                 ppg_buffer, ppg_data,
                 notch=False,
                 filter_state=ppg_filter_state)
