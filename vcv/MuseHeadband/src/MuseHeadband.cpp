@@ -24,6 +24,7 @@ namespace easywsclient {
     protected:
         int sockfd = -1;
         ReadyState state = CLOSED;
+        std::string messageBuffer;  // Buffer for incomplete messages
 
     public:
         WebSocket() {}
@@ -105,57 +106,52 @@ namespace easywsclient {
         }
 
         bool decodeFrame(const char* input, size_t inputLen, std::vector<char>& output) {
-            if (inputLen < 2) return false;
-
-            // Check if this is a final frame (first bit)
-            bool fin = (input[0] & 0x80) != 0;
-
-            // Get opcode (last 4 bits of first byte)
-            uint8_t opcode = input[0] & 0x0F;
-
-            // Check if masked (first bit of second byte)
-            bool masked = (input[1] & 0x80) != 0;
-
-            // Get payload length
-            uint64_t payload_length = input[1] & 0x7F;
+            if (inputLen < 2) {
+                DEBUG("Frame too short (%zu bytes), waiting for more data", inputLen);
+                return false;
+            }
+            
+            unsigned char first_byte = input[0];
+            bool fin = (first_byte & 0x80) != 0;
+            unsigned char opcode = first_byte & 0x0F;
+            
+            unsigned char second_byte = input[1];
+            bool masked = (second_byte & 0x80) != 0;
+            uint64_t payload_length = second_byte & 0x7F;
             size_t pos = 2;
-
+            
+            // Handle extended payload length
             if (payload_length == 126) {
-                if (inputLen < 4) {
-                    WARN("Payload length is 126 but input length is %d", inputLen);
-                    return false;
-                }
-                payload_length = (input[2] << 8) | input[3];
-                pos += 2;
-            } else if (payload_length == 127) {
-                if (inputLen < 10) {
-                    WARN("Payload length is 127 but input length is %d", inputLen);
-                    return false;
-                }
+                if (inputLen < 4) return false;
+                payload_length = ((unsigned char)input[2] << 8) | (unsigned char)input[3];
+                pos = 4;
+            }
+            else if (payload_length == 127) {
+                if (inputLen < 10) return false;
                 payload_length = 0;
                 for (int i = 0; i < 8; i++) {
                     payload_length = (payload_length << 8) | (unsigned char)input[2+i];
                 }
-                pos += 8;
+                pos = 10;
             }
-
-            // Get masking key if masked
+            
+            DEBUG("Frame header: fin=%d, opcode=%d, masked=%d, payload_length=%lu, pos=%zu, inputLen=%zu", 
+                  fin, opcode, masked, payload_length, pos, inputLen);
+            
+            // Get masking key if present
             uint8_t mask[4] = {0, 0, 0, 0};
             if (masked) {
-                if (inputLen < pos + 4) {
-                    WARN("Masked but input length is %d", inputLen);
-                    return false;
-                }
+                if (inputLen < pos + 4) return false;
                 memcpy(mask, input + pos, 4);
                 pos += 4;
             }
-
-            // Check if we have enough data
+            
+            // Check if we have the full payload
             if (inputLen < pos + payload_length) {
-                WARN("Not enough data for payload of length %d", payload_length);
+                DEBUG("Waiting for more data: have %zu bytes, need %zu", inputLen, pos + payload_length);
                 return false;
             }
-
+            
             // Decode payload
             output.resize(payload_length);
             for (size_t i = 0; i < payload_length; i++) {
@@ -165,7 +161,7 @@ namespace easywsclient {
                     output[i] = input[pos + i];
                 }
             }
-
+            
             return true;
         }
 
@@ -177,22 +173,38 @@ namespace easywsclient {
 
         bool receive(char* buffer, size_t bufferSize, size_t* bytesRead) {
             if (state != OPEN) return false;
-            ssize_t bytes = recv(sockfd, buffer, bufferSize - 1, 0);
+            
+            // Use a large temporary buffer for receiving data
+            char tempBuffer[131072];  // 128KB buffer
+            ssize_t bytes = recv(sockfd, tempBuffer, sizeof(tempBuffer), 0);
+            
             if (bytes > 0) {
-                // Decode WebSocket frame
+                DEBUG("Received %zd raw bytes", bytes);
+                
+                // Add new data to existing buffer
+                messageBuffer.insert(messageBuffer.end(), tempBuffer, tempBuffer + bytes);
+                
+                // Try to decode a frame from the buffer
                 std::vector<char> decoded;
-                if (decodeFrame(buffer, bytes, decoded)) {
-                    // Copy decoded data to buffer
+                bool frameDecoded = decodeFrame(messageBuffer.data(), messageBuffer.size(), decoded);
+                
+                if (frameDecoded) {
+                    // Copy as much as we can to the output buffer
                     size_t copySize = std::min(decoded.size(), bufferSize - 1);
                     memcpy(buffer, decoded.data(), copySize);
                     buffer[copySize] = '\0';
                     *bytesRead = copySize;
+                    
+                    // Clear the message buffer since we successfully decoded a frame
+                    messageBuffer.clear();
+                    
                     return true;
+                } else {
+                    // Keep the partial data in messageBuffer
+                    DEBUG("Incomplete frame, buffered %zu bytes", messageBuffer.size());
                 }
-                DEBUG("Failed to decode WebSocket frame");
-                return false;
             }
-            WARN("Receive failed with error: %s", strerror(errno));
+            
             return false;
         }
 
@@ -244,7 +256,8 @@ struct MuseHeadband : Module {
     float eeg_values[4] = {0.f, 0.f, 0.f, 0.f};
     float brain_waves[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // delta, theta, alpha, beta, gamma
 
-    std::string messageBuffer;
+
+    std::string messageBuffer;  // Buffer for incomplete messages
 
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -270,31 +283,31 @@ struct MuseHeadband : Module {
                     if (connected) {
                         INFO("Connected to Muse Headband server");
                         messageBuffer.clear();
+                    } else {
+                        WARN("Failed to connect to Muse Headband server");
                     }
                 }
-
+                
                 if (connected) {
-                    char buffer[16384];
+                    char buffer[131072];  // 128KB buffer
                     size_t bytesRead;
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
                         buffer[bytesRead] = '\0';
-                        std::string message(buffer);
-
-                        // Check if this is a complete JSON message
-                        if (message[0] == '{' && message[message.length()-1] == '}') {
-                            parseMuseData(message.c_str());
+                        std::string message(buffer, bytesRead);
+                        
+                        // Add to message buffer
+                        messageBuffer += message;
+                        
+                        // Check if we have a complete JSON message
+                        if (!messageBuffer.empty() && 
+                            messageBuffer[0] == '{' && 
+                            messageBuffer[messageBuffer.length()-1] == '}') {
+                            parseMuseData(messageBuffer.c_str());
                             messageBuffer.clear();
-                        } else {
-                            // Accumulate partial messages
-                            messageBuffer += message;
-                            if (messageBuffer[0] == '{' && 
-                                messageBuffer[messageBuffer.length()-1] == '}') {
-                                parseMuseData(messageBuffer.c_str());
-                                messageBuffer.clear();
-                            }
                         }
                     }
                 }
+                
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
