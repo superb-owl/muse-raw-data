@@ -430,9 +430,6 @@ struct MuseHeadband : Module {
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
                     outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i]);
                 }
-                
-                // Debug logging
-                DEBUG("Processing sample. Remaining samples: %zu", eeg_samples.size());
             }
 
             // Output brain wave bands
