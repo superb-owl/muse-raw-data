@@ -13,6 +13,8 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <jansson.h>
+
 
 // Websocket implementation - single header, no dependencies
 namespace easywsclient {
@@ -104,7 +106,15 @@ struct MuseHeadband : Module {
         INPUTS_LEN
     };
     enum OutputId {
-        STREAM_OUTPUT,
+        EEG1_OUTPUT,
+        EEG2_OUTPUT,
+        EEG3_OUTPUT,
+        EEG4_OUTPUT,
+        DELTA_OUTPUT,
+        THETA_OUTPUT,
+        ALPHA_OUTPUT,
+        BETA_OUTPUT,
+        GAMMA_OUTPUT,
         OUTPUTS_LEN
     };
     enum LightId {
@@ -116,46 +126,100 @@ struct MuseHeadband : Module {
     std::thread wsThread;
     std::mutex dataMutex;
     bool connected = false;
-    float currentValue = 0.f;
     bool running = true;
 
-    MuseHeadband() {
-        INFO("MuseHeadband loaded");
-        config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-        configOutput(STREAM_OUTPUT, "WebSocket Stream");
+    // EEG data
+    float eeg_values[4] = {0.f, 0.f, 0.f, 0.f};
+    float brain_waves[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // delta, theta, alpha, beta, gamma
 
-        // Start WebSocket connection in separate thread
+    MuseHeadband() {
+        config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+        
+        // Configure outputs
+        configOutput(EEG1_OUTPUT, "EEG Channel 1");
+        configOutput(EEG2_OUTPUT, "EEG Channel 2");
+        configOutput(EEG3_OUTPUT, "EEG Channel 3");
+        configOutput(EEG4_OUTPUT, "EEG Channel 4");
+        configOutput(DELTA_OUTPUT, "Delta waves (1-4 Hz)");
+        configOutput(THETA_OUTPUT, "Theta waves (4-8 Hz)");
+        configOutput(ALPHA_OUTPUT, "Alpha waves (8-13 Hz)");
+        configOutput(BETA_OUTPUT, "Beta waves (13-32 Hz)");
+        configOutput(GAMMA_OUTPUT, "Gamma waves (32+ Hz)");
+        INFO("MuseHeadband loaded");
+
+        // Start WebSocket connection thread
         wsThread = std::thread([this]() {
-            INFO("MuseHeadband thread started");
             while (running) {
                 if (!ws || ws->getReadyState() != easywsclient::OPEN) {
-                    INFO("Connecting to WebSocket server...");
                     ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8080"));
                     connected = (ws != nullptr);
                     if (connected) {
-                        INFO("Connected to WebSocket server");
+                        INFO("Connected to Muse Headband server");
                         ws->send("Hello from VCV Rack!");
+                    } else {
+                        WARN("Failed to connect to Muse Headband server");
                     }
                 }
-                
                 if (connected) {
-                    char buffer[1024];
+                    char buffer[93882 * 2];  // 93882 was the length of a sample with FAST=true set
                     size_t bytesRead;
+                    INFO("Reading data from Muse Headband");
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
+                        INFO("Received %d bytes", bytesRead);
                         buffer[bytesRead] = '\0';
-                        try {
-                            float value = std::stof(buffer);
-                            std::lock_guard<std::mutex> lock(dataMutex);
-                            currentValue = value;
-                        } catch (...) {
-                            // Handle parsing errors
-                        }
+                        parseMuseData(buffer);
                     }
                 }
-                
+                break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
+    }
+
+    void parseMuseData(const char* jsonStr) {
+        INFO("Received JSON: %s", jsonStr);
+        json_error_t error;
+        json_t* root = json_loads(jsonStr, 0, &error);
+        
+        if (!root) {
+            WARN("Failed to parse JSON: %s", error.text);
+            return;
+        }
+
+        // Parse EEG buffer
+        json_t* eeg_buffer = json_object_get(root, "eeg_buffer");
+        if (json_is_array(eeg_buffer) && json_array_size(eeg_buffer) > 0) {
+            json_t* first_sample = json_array_get(eeg_buffer, 0);
+            if (json_is_array(first_sample)) {
+                std::lock_guard<std::mutex> lock(dataMutex);
+                for (size_t i = 0; i < 4 && i < json_array_size(first_sample); i++) {
+                    json_t* value = json_array_get(first_sample, i);
+                    if (json_is_number(value)) {
+                        eeg_values[i] = json_number_value(value) / 1000.0f; // Convert to millivolts
+                    }
+                }
+            }
+        }
+
+        // Parse brain wave bands
+        json_t* eeg_bands = json_object_get(root, "eeg_bands");
+        if (json_is_object(eeg_bands)) {
+            std::lock_guard<std::mutex> lock(dataMutex);
+            const char* band_names[] = {"delta", "theta", "alpha", "beta", "gamma"};
+            for (size_t i = 0; i < 5; i++) {
+                json_t* band = json_object_get(eeg_bands, band_names[i]);
+                if (json_is_array(band) && json_array_size(band) > 0) {
+                    json_t* first_value = json_array_get(band, 0);
+                    if (json_is_number(first_value)) {
+                        brain_waves[i] = json_number_value(first_value) / 100.0f; // Scale to reasonable voltage
+                    }
+                }
+            }
+        }
+
+        json_decref(root);
+        INFO("Parsed EEG values: %.2f, %.2f, %.2f, %.2f", 
+              eeg_values[0], eeg_values[1], eeg_values[2], eeg_values[3]);
     }
 
     ~MuseHeadband() {
@@ -169,34 +233,53 @@ struct MuseHeadband : Module {
     }
 
     void process(const ProcessArgs& args) override {
-        // Update connection status light
         lights[CONNECTION_LIGHT].setBrightness(connected ? 1.f : 0.f);
 
-        // Output the current value
         std::lock_guard<std::mutex> lock(dataMutex);
-        outputs[STREAM_OUTPUT].setVoltage(currentValue * 10.f); // Scale to ±10V range
+        
+        // Output EEG values
+        for (int i = 0; i < 4; i++) {
+            outputs[EEG1_OUTPUT + i].setVoltage(eeg_values[i]);
+        }
+
+        // Output brain wave bands
+        for (int i = 0; i < 5; i++) {
+            outputs[DELTA_OUTPUT + i].setVoltage(brain_waves[i]);
+        }
     }
 };
-
 struct MuseHeadbandWidget : ModuleWidget {
     MuseHeadbandWidget(MuseHeadband* module) {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/MuseHeadband.svg")));
 
-        // Add connection status light
+        // Add connection status light at the top
         addChild(createLightCentered<MediumLight<GreenLight>>(
             mm2px(Vec(7.62, 10.16)), 
             module, 
             MuseHeadband::CONNECTION_LIGHT
         ));
 
-        // Add output port
-        addOutput(createOutputCentered<PJ301MPort>(
-            mm2px(Vec(7.62, 116.84)), 
-            module, 
-            MuseHeadband::STREAM_OUTPUT
-        ));
+        // EEG outputs
+        for (int i = 0; i < 4; i++) {
+            addOutput(createOutputCentered<PJ301MPort>(
+                mm2px(Vec(7.62, 30 + i * 20)), 
+                module, 
+                MuseHeadband::EEG1_OUTPUT + i
+            ));
+        }
+
+        // Brain wave band outputs
+        const char* labels[] = {"δ", "θ", "α", "β", "γ"};
+        for (int i = 0; i < 5; i++) {
+            addOutput(createOutputCentered<PJ301MPort>(
+                mm2px(Vec(7.62, 110 + i * 20)), 
+                module, 
+                MuseHeadband::DELTA_OUTPUT + i
+            ));
+        }
     }
 };
 
 Model* modelMuseHeadband = createModel<MuseHeadband, MuseHeadbandWidget>("MuseHeadband");
+
