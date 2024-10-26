@@ -1,7 +1,7 @@
+import os
 import time
 import csv
 import numpy as np
-from muselsl import stream, list_muses
 from pylsl import StreamInlet, resolve_byprop
 from scipy.ndimage import interpolation
 
