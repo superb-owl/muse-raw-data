@@ -314,7 +314,6 @@ struct MuseHeadband : Module {
     }
 
     void parseMuseData(const char* jsonStr) {
-        INFO("Received JSON: %s", jsonStr);
         json_error_t error;
         json_t* root = json_loads(jsonStr, 0, &error);
         
@@ -370,6 +369,10 @@ struct MuseHeadband : Module {
     }
 
     void process(const ProcessArgs& args) override {
+        // Update connected status based on WebSocket state
+        connected = (ws && ws->getReadyState() == easywsclient::OPEN);
+        INFO("Connected: %d", connected);
+
         lights[CONNECTION_LIGHT].setBrightness(connected ? 1.f : 0.f);
 
         std::lock_guard<std::mutex> lock(dataMutex);
@@ -384,6 +387,7 @@ struct MuseHeadband : Module {
             outputs[DELTA_OUTPUT + i].setVoltage(brain_waves[i]);
         }
     }
+
 };
 
 struct MuseHeadbandWidget : ModuleWidget {
@@ -465,4 +469,5 @@ struct MuseHeadbandWidget : ModuleWidget {
 };
 
 Model* modelMuseHeadband = createModel<MuseHeadband, MuseHeadbandWidget>("MuseHeadband");
+
 
