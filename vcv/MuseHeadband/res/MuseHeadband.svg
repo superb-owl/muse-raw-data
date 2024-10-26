@@ -2,19 +2,48 @@
   <!-- Background -->
   <rect width="30.48" height="380.0" fill="#f0f0f0"/>
 
-  <!-- Port holes (just for reference, VCV Rack will overlay the actual ports) -->
-  <circle cx="15.24" cy="40" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="90" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="120" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="150" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="180" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="240" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="270" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="300" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="330" r="4" fill="#black" opacity="0.1"/>
-  <circle cx="15.24" cy="360" r="4" fill="#black" opacity="0.1"/>
-  
-  <!-- Decorative lines -->
-  <line x1="5" y1="45" x2="25.48" y2="45" stroke="#888" stroke-width="0.5"/>
-  <line x1="5" y1="195" x2="25.48" y2="195" stroke="#888" stroke-width="0.5"/>
+  <!-- Module Title -->
+  <text x="15.24" y="10" font-family="sans-serif" font-size="8" text-anchor="middle" fill="black">MUSE</text>
+
+  <!-- Connection Label -->
+  <text x="15.24" y="20" font-family="sans-serif" font-size="6" text-anchor="middle" fill="black">CONNECTION</text>
+
+  <!-- Connection LED placeholder -->
+  <circle cx="15.24" cy="27" r="2" fill="#888888"/>
+
+  <!-- EEG Section -->
+  <text x="15.24" y="40" font-family="sans-serif" font-size="7" text-anchor="middle" fill="black">EEG</text>
+
+  <!-- EEG Channel Labels and Ports -->
+  <text x="5" y="55" font-family="sans-serif" font-size="6" fill="black">CH 1</text>
+  <circle cx="22.86" cy="55" r="4" fill="#888888"/>
+
+  <text x="5" y="75" font-family="sans-serif" font-size="6" fill="black">CH 2</text>
+  <circle cx="22.86" cy="75" r="4" fill="#888888"/>
+
+  <text x="5" y="95" font-family="sans-serif" font-size="6" fill="black">CH 3</text>
+  <circle cx="22.86" cy="95" r="4" fill="#888888"/>
+
+  <text x="5" y="115" font-family="sans-serif" font-size="6" fill="black">CH 4</text>
+  <circle cx="22.86" cy="115" r="4" fill="#888888"/>
+
+  <!-- Brainwave Section -->
+  <text x="15.24" y="140" font-family="sans-serif" font-size="7" text-anchor="middle" fill="black">WAVES</text>
+
+  <!-- Brainwave Labels and Ports -->
+  <text x="5" y="155" font-family="sans-serif" font-size="6" fill="black">δ DELTA</text>
+  <circle cx="22.86" cy="155" r="4" fill="#888888"/>
+
+  <text x="5" y="175" font-family="sans-serif" font-size="6" fill="black">θ THETA</text>
+  <circle cx="22.86" cy="175" r="4" fill="#888888"/>
+
+  <text x="5" y="195" font-family="sans-serif" font-size="6" fill="black">α ALPHA</text>
+  <circle cx="22.86" cy="195" r="4" fill="#888888"/>
+
+  <text x="5" y="215" font-family="sans-serif" font-size="6" fill="black">β BETA</text>
+  <circle cx="22.86" cy="215" r="4" fill="#888888"/>
+
+  <text x="5" y="235" font-family="sans-serif" font-size="6" fill="black">γ GAMMA</text>
+  <circle cx="22.86" cy="235" r="4" fill="#888888"/>
 </svg>
+
