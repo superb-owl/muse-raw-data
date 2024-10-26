@@ -416,19 +416,21 @@ struct MuseHeadbandWidget : ModuleWidget {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/MuseHeadband.svg")));
 
+        float x_center = 10;
+
         // Module title
-        addChild(new ThemedLabel(mm2px(Vec(22.86, 10)), "MUSE", true));
+        addChild(new ThemedLabel(mm2px(Vec(x_center, 10)), "MUSE", true));
 
         // Connection LED and label
-        addChild(new ThemedLabel(mm2px(Vec(22.86, 20)), "CONNECTION"));
+        addChild(new ThemedLabel(mm2px(Vec(x_center, 20)), "CONNECTION"));
         addChild(createLightCentered<MediumLight<GreenRedLight>>(
-            mm2px(Vec(22.86, 27)), 
+            mm2px(Vec(x_center, 27)), 
             module, 
             MuseHeadband::CONNECTION_LIGHT
         ));
 
         // EEG Section
-        addChild(new ThemedLabel(mm2px(Vec(22.86, 40)), "EEG", true));
+        addChild(new ThemedLabel(mm2px(Vec(x_center, 40)), "EEG", true));
         
         // EEG Channel outputs
         const float eegStart = 55;
@@ -447,7 +449,7 @@ struct MuseHeadbandWidget : ModuleWidget {
         }
 
         // Brainwave Section
-        addChild(new ThemedLabel(mm2px(Vec(22.86, 140)), "WAVES", true));
+        addChild(new ThemedLabel(mm2px(Vec(x_center, 140)), "WAVES", true));
 
         // Brainwave outputs
         const float waveStart = 155;
@@ -471,7 +473,4 @@ struct MuseHeadbandWidget : ModuleWidget {
 };
 
 Model* modelMuseHeadband = createModel<MuseHeadband, MuseHeadbandWidget>("MuseHeadband");
-
-
-
 
