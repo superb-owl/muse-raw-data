@@ -104,6 +104,71 @@ namespace easywsclient {
             return nullptr;
         }
 
+        bool decodeFrame(const char* input, size_t inputLen, std::vector<char>& output) {
+            if (inputLen < 2) return false;
+
+            // Check if this is a final frame (first bit)
+            bool fin = (input[0] & 0x80) != 0;
+
+            // Get opcode (last 4 bits of first byte)
+            uint8_t opcode = input[0] & 0x0F;
+
+            // Check if masked (first bit of second byte)
+            bool masked = (input[1] & 0x80) != 0;
+
+            // Get payload length
+            uint64_t payload_length = input[1] & 0x7F;
+            size_t pos = 2;
+
+            if (payload_length == 126) {
+                if (inputLen < 4) {
+                    WARN("Payload length is 126 but input length is %d", inputLen);
+                    return false;
+                }
+                payload_length = (input[2] << 8) | input[3];
+                pos += 2;
+            } else if (payload_length == 127) {
+                if (inputLen < 10) {
+                    WARN("Payload length is 127 but input length is %d", inputLen);
+                    return false;
+                }
+                payload_length = 0;
+                for (int i = 0; i < 8; i++) {
+                    payload_length = (payload_length << 8) | (unsigned char)input[2+i];
+                }
+                pos += 8;
+            }
+
+            // Get masking key if masked
+            uint8_t mask[4] = {0, 0, 0, 0};
+            if (masked) {
+                if (inputLen < pos + 4) {
+                    WARN("Masked but input length is %d", inputLen);
+                    return false;
+                }
+                memcpy(mask, input + pos, 4);
+                pos += 4;
+            }
+
+            // Check if we have enough data
+            if (inputLen < pos + payload_length) {
+                WARN("Not enough data for payload of length %d", payload_length);
+                return false;
+            }
+
+            // Decode payload
+            output.resize(payload_length);
+            for (size_t i = 0; i < payload_length; i++) {
+                if (masked) {
+                    output[i] = input[pos + i] ^ mask[i % 4];
+                } else {
+                    output[i] = input[pos + i];
+                }
+            }
+
+            return true;
+        }
+
         void send(const std::string& message) {
             if (state == OPEN) {
                 ::send(sockfd, message.c_str(), message.size(), 0);
@@ -114,9 +179,20 @@ namespace easywsclient {
             if (state != OPEN) return false;
             ssize_t bytes = recv(sockfd, buffer, bufferSize - 1, 0);
             if (bytes > 0) {
-                *bytesRead = bytes;
-                return true;
+                // Decode WebSocket frame
+                std::vector<char> decoded;
+                if (decodeFrame(buffer, bytes, decoded)) {
+                    // Copy decoded data to buffer
+                    size_t copySize = std::min(decoded.size(), bufferSize - 1);
+                    memcpy(buffer, decoded.data(), copySize);
+                    buffer[copySize] = '\0';
+                    *bytesRead = copySize;
+                    return true;
+                }
+                DEBUG("Failed to decode WebSocket frame");
+                return false;
             }
+            WARN("Receive failed with error: %s", strerror(errno));
             return false;
         }
 
@@ -168,6 +244,8 @@ struct MuseHeadband : Module {
     float eeg_values[4] = {0.f, 0.f, 0.f, 0.f};
     float brain_waves[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // delta, theta, alpha, beta, gamma
 
+    std::string messageBuffer;
+
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
@@ -191,22 +269,32 @@ struct MuseHeadband : Module {
                     connected = (ws != nullptr);
                     if (connected) {
                         INFO("Connected to Muse Headband server");
-                        ws->send("Hello from VCV Rack!");
-                    } else {
-                        WARN("Failed to connect to Muse Headband server");
+                        messageBuffer.clear();
                     }
                 }
+
                 if (connected) {
-                    char buffer[93882 * 2];  // 93882 was the length of a sample with FAST=true set
+                    char buffer[16384];
                     size_t bytesRead;
-                    INFO("Reading data from Muse Headband");
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
-                        INFO("Received %d bytes", bytesRead);
                         buffer[bytesRead] = '\0';
-                        parseMuseData(buffer);
+                        std::string message(buffer);
+
+                        // Check if this is a complete JSON message
+                        if (message[0] == '{' && message[message.length()-1] == '}') {
+                            parseMuseData(message.c_str());
+                            messageBuffer.clear();
+                        } else {
+                            // Accumulate partial messages
+                            messageBuffer += message;
+                            if (messageBuffer[0] == '{' && 
+                                messageBuffer[messageBuffer.length()-1] == '}') {
+                                parseMuseData(messageBuffer.c_str());
+                                messageBuffer.clear();
+                            }
+                        }
                     }
                 }
-                break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
