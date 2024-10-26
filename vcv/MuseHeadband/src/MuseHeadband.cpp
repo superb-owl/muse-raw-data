@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <jansson.h>
+#include <vector>
 
 
 // Websocket implementation - single header, no dependencies
@@ -254,8 +255,13 @@ struct MuseHeadband : Module {
     bool running = true;
 
     // EEG data
+    std::vector<std::vector<float>> eeg_samples;
     float eeg_values[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
     float brain_waves[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // delta, theta, alpha, beta, gamma
+    int eeg_sample_rate = 256; // Default value, will be updated from JSON
+    float sample_time = 0.f; // Accumulator for sample timing
+
+
 
 
     std::string messageBuffer;  // Buffer for incomplete messages
@@ -324,20 +330,47 @@ struct MuseHeadband : Module {
             return;
         }
 
-        // Parse EEG buffer
+        // Parse EEG sample rate
+        json_t* sample_rate = json_object_get(root, "eeg_sample_rate");
+        if (json_is_integer(sample_rate)) {
+            eeg_sample_rate = json_integer_value(sample_rate);
+            INFO("EEG sample rate: %d Hz", eeg_sample_rate);
+        }
+
         json_t* eeg_buffer = json_object_get(root, "eeg_buffer");
-        if (json_is_array(eeg_buffer) && json_array_size(eeg_buffer) > 0) {
-            json_t* first_sample = json_array_get(eeg_buffer, 0);
-            if (json_is_array(first_sample)) {
-                std::lock_guard<std::mutex> lock(dataMutex);
-                INFO("Received EEG buffer with %zu num per sample", json_array_size(first_sample));
-                for (size_t i = 0; i < 5 && i < json_array_size(first_sample); i++) {
-                    json_t* value = json_array_get(first_sample, i);
-                    if (json_is_number(value)) {
-                        eeg_values[i] = json_number_value(value) / 1000.0f; // Convert to millivolts
+        if (json_is_array(eeg_buffer)) {
+            std::lock_guard<std::mutex> lock(dataMutex);
+            size_t buffer_size = json_array_size(eeg_buffer);
+            eeg_samples.clear();
+            eeg_samples.reserve(buffer_size);
+
+            for (size_t i = 0; i < buffer_size; i++) {
+                json_t* sample = json_array_get(eeg_buffer, i);
+                if (json_is_array(sample)) {
+                    std::vector<float> sample_values;
+                    size_t sample_size = json_array_size(sample);
+                    sample_values.reserve(sample_size);
+
+                    for (size_t j = 0; j < sample_size; j++) {
+                        json_t* value = json_array_get(sample, j);
+                        if (json_is_number(value)) {
+                            sample_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
+                        }
                     }
+
+                    eeg_samples.push_back(std::move(sample_values));
                 }
             }
+
+            // Update eeg_values with the last sample for backwards compatibility
+            if (!eeg_samples.empty()) {
+                const auto& last_sample = eeg_samples.back();
+                for (size_t i = 0; i < 5 && i < last_sample.size(); i++) {
+                    eeg_values[i] = last_sample[i];
+                }
+            }
+
+            INFO("Received EEG buffer with %zu samples", eeg_samples.size());
         }
 
         // Parse brain wave bands
@@ -357,9 +390,10 @@ struct MuseHeadband : Module {
         }
 
         json_decref(root);
-        INFO("Parsed EEG values: %.2f, %.2f, %.2f, %.2f, %.2f", 
+        INFO("Parsed EEG values (last sample): %.2f, %.2f, %.2f, %.2f, %.2f", 
               eeg_values[0], eeg_values[1], eeg_values[2], eeg_values[3], eeg_values[4]);
     }
+
 
     ~MuseHeadband() {
         running = false;
@@ -370,7 +404,6 @@ struct MuseHeadband : Module {
             ws->close();
         }
     }
-
     void process(const ProcessArgs& args) override {
         // Update connected status based on WebSocket state
         connected = (ws && ws->getReadyState() == easywsclient::OPEN);
@@ -379,16 +412,38 @@ struct MuseHeadband : Module {
 
         std::lock_guard<std::mutex> lock(dataMutex);
         
-        // Output EEG values
-        for (int i = 0; i < 5; i++) {
-            outputs[EEG1_OUTPUT + i].setVoltage(eeg_values[i]);
-        }
+        // Calculate time for one sample
+        float sample_period = 1.f / eeg_sample_rate;
+        
+        // Accumulate time
+        sample_time += args.sampleTime;
+        
+        // Check if it's time to output a new sample
+        if (sample_time >= sample_period) {
+            sample_time -= sample_period;
+            
+            // Output EEG values
+            if (!eeg_samples.empty()) {
+                std::vector<float> current_sample = std::move(eeg_samples.front());
+                eeg_samples.erase(eeg_samples.begin());
 
-        // Output brain wave bands
-        for (int i = 0; i < 5; i++) {
-            outputs[DELTA_OUTPUT + i].setVoltage(brain_waves[i]);
+                for (int i = 0; i < 5 && i < current_sample.size(); i++) {
+                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i]);
+                }
+                
+                // Debug logging
+                DEBUG("Processing sample. Remaining samples: %zu", eeg_samples.size());
+            }
+
+            // Output brain wave bands
+            for (int i = 0; i < 5; i++) {
+                outputs[DELTA_OUTPUT + i].setVoltage(brain_waves[i]);
+            }
         }
     }
+
+
+
 
 };
 
@@ -476,4 +531,13 @@ struct MuseHeadbandWidget : ModuleWidget {
 };
 
 Model* modelMuseHeadband = createModel<MuseHeadband, MuseHeadbandWidget>("MuseHeadband");
+
+
+
+
+
+
+
+
+
 

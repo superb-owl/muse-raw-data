@@ -21,6 +21,10 @@ if os.getenv("FAST") == "true":
     EPOCH_LENGTH = 1
     OVERLAP_LENGTH = .5
 
+    # this gives 2 seconds of data in each frame
+    # that's 512 samples per frame
+    # .5 seconds of overlap, meaning we get 128 new samples each frame
+
 # Amount to 'shift' the start of each next consecutive epoch
 # NOTE: SHIFT_LENGTH * sample_rate should be an integer
 SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH

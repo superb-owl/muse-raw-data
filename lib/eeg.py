@@ -18,8 +18,13 @@ class Band:
 eeg_sample_rate = 256 # Will be set explicitly below, in case it's different
 ppg_sample_rate = 64  # Will be set explicitly below, in case it's different
 
-eeg_buffer = np.zeros((int(eeg_sample_rate * params.BUFFER_LENGTH), params.NUM_EEG_SENSORS))
-ppg_buffer = np.zeros((int(ppg_sample_rate * params.BUFFER_LENGTH), params.NUM_PPG_SENSORS))
+eeg_samples_per_frame = int(eeg_sample_rate * params.BUFFER_LENGTH)
+ppg_samples_per_frame = int(ppg_sample_rate * params.BUFFER_LENGTH)
+
+eeg_new_samples_per_frame = int(eeg_sample_rate * params.SHIFT_LENGTH)
+
+eeg_buffer = np.zeros((eeg_samples_per_frame, params.NUM_EEG_SENSORS))
+ppg_buffer = np.zeros((ppg_samples_per_frame, params.NUM_PPG_SENSORS))
 
 def pull_eeg_data():
     global eeg_sample_rate
