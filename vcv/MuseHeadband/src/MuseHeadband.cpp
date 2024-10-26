@@ -120,16 +120,20 @@ struct MuseHeadband : Module {
     bool running = true;
 
     MuseHeadband() {
+        INFO("MuseHeadband loaded");
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
         configOutput(STREAM_OUTPUT, "WebSocket Stream");
 
         // Start WebSocket connection in separate thread
         wsThread = std::thread([this]() {
+            INFO("MuseHeadband thread started");
             while (running) {
                 if (!ws || ws->getReadyState() != easywsclient::OPEN) {
+                    INFO("Connecting to WebSocket server...");
                     ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8080"));
                     connected = (ws != nullptr);
                     if (connected) {
+                        INFO("Connected to WebSocket server");
                         ws->send("Hello from VCV Rack!");
                     }
                 }
