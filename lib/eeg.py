@@ -99,8 +99,10 @@ def start_eeg_loop(eeg_inlet, ppg_inlet):
 
     eeg_filter_state = None
     ppg_filter_state = None
-    f = open('recording.csv', 'w')
-    recording = csv.writer(f)
+    recording = None
+    if os.getenv('RECORDING_FILE', ''):
+        f = open(os.getenv('RECORDING_FILE'), 'w')
+        recording = csv.writer(f)
     try:
         while True:
             ppg_data, ppg_timestamp = ppg_inlet.pull_chunk(
@@ -115,8 +117,9 @@ def start_eeg_loop(eeg_inlet, ppg_inlet):
             # print("EEG", eeg_timestamp[0], eeg_timestamp[-1])
             ppg_data_big = interpolation.zoom(ppg_data, (len(eeg_data) / len(ppg_data), 1.0))
             eeg_timestamp = np.array([eeg_timestamp]).T
-            recording_data = np.concatenate((eeg_timestamp, eeg_data, ppg_data_big), axis=1)
-            recording.writerows(recording_data)
+            if recording:
+                recording_data = np.concatenate((eeg_timestamp, eeg_data, ppg_data_big), axis=1)
+                recording.writerows(recording_data)
 
             eeg_buffer, eeg_filter_state = util.update_buffer(
                 eeg_buffer, eeg_data,
