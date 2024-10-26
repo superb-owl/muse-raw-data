@@ -136,9 +136,6 @@ namespace easywsclient {
                 pos = 10;
             }
             
-            DEBUG("Frame header: fin=%d, opcode=%d, masked=%d, payload_length=%lu, pos=%zu, inputLen=%zu", 
-                  fin, opcode, masked, payload_length, pos, inputLen);
-            
             // Get masking key if present
             uint8_t mask[4] = {0, 0, 0, 0};
             if (masked) {
@@ -180,8 +177,6 @@ namespace easywsclient {
             ssize_t bytes = recv(sockfd, tempBuffer, sizeof(tempBuffer), 0);
             
             if (bytes > 0) {
-                DEBUG("Received %zd raw bytes", bytes);
-                
                 // Add new data to existing buffer
                 messageBuffer.insert(messageBuffer.end(), tempBuffer, tempBuffer + bytes);
                 
@@ -202,7 +197,7 @@ namespace easywsclient {
                     return true;
                 } else {
                     // Keep the partial data in messageBuffer
-                    DEBUG("Incomplete frame, buffered %zu bytes", messageBuffer.size());
+                    // DEBUG("Incomplete frame, buffered %zu bytes", messageBuffer.size());
                 }
             }
             
@@ -361,6 +356,7 @@ struct MuseHeadband : Module {
                     eeg_samples.push_back(std::move(sample_values));
                 }
             }
+            INFO("Parsed %zu EEG samples", eeg_samples.size());
 
             // Update eeg_values with the last sample for backwards compatibility
             if (!eeg_samples.empty()) {
@@ -369,8 +365,6 @@ struct MuseHeadband : Module {
                     eeg_values[i] = last_sample[i];
                 }
             }
-
-            INFO("Received EEG buffer with %zu samples", eeg_samples.size());
         }
 
         // Parse brain wave bands
@@ -428,7 +422,7 @@ struct MuseHeadband : Module {
                 eeg_samples.erase(eeg_samples.begin());
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
-                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i]);
+                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 100.0);
                 }
             }
 
