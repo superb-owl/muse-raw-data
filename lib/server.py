@@ -9,6 +9,7 @@ import lib.params as params
 
 # WebSocket server handler function
 async def websocket_handler(websocket, path):
+    print("WEBSOCKET CONNECTED")
     while True:
         data = eeg.get_data()
         data.update(joystick.get_data())
@@ -20,6 +21,7 @@ async def websocket_handler(websocket, path):
 
 # Function to start the WebSocket server
 async def start_server():
+    print("START SERVER")
     server = await websockets.serve(websocket_handler, 'localhost', 8080)
     await server.wait_closed()
 

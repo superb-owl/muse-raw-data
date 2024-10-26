@@ -385,32 +385,78 @@ struct MuseHeadband : Module {
         }
     }
 };
+
 struct MuseHeadbandWidget : ModuleWidget {
+    struct ThemedLabel : Widget {
+        std::string text;
+        bool bold;
+        
+        ThemedLabel(Vec pos, const std::string& text, bool bold = false) {
+            this->box.pos = pos;
+            this->text = text;
+            this->bold = bold;
+        }
+
+        void draw(const DrawArgs& args) override {
+            nvgFontSize(args.vg, bold ? 13.0 : 11.0);
+            nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+            nvgTextLetterSpacing(args.vg, 0.0);
+            nvgTextAlign(args.vg, NVG_ALIGN_CENTER);
+            nvgFillColor(args.vg, nvgRGB(0, 0, 0));
+            nvgText(args.vg, 0, 0, text.c_str(), NULL);
+        }
+    };
+
     MuseHeadbandWidget(MuseHeadband* module) {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/MuseHeadband.svg")));
 
-        // Add connection status light at the top
+        // Module title
+        addChild(new ThemedLabel(mm2px(Vec(15.24, 20)), "MUSE", true));
+
+        // Connection LED and label
+        addChild(new ThemedLabel(mm2px(Vec(15.24, 35)), "CONNECTION"));
         addChild(createLightCentered<MediumLight<GreenLight>>(
-            mm2px(Vec(7.62, 10.16)), 
+            mm2px(Vec(15.24, 40)), 
             module, 
             MuseHeadband::CONNECTION_LIGHT
         ));
 
-        // EEG outputs
+        // EEG Section
+        addChild(new ThemedLabel(mm2px(Vec(15.24, 60)), "EEG", true));
+        
+        // EEG Channel outputs
+        const float eegStart = 90;
+        const float eegSpacing = 30;
         for (int i = 0; i < 4; i++) {
+            addChild(new ThemedLabel(
+                mm2px(Vec(15.24, eegStart - 5 + i * eegSpacing)),
+                string::f("CH %d", i + 1)
+            ));
             addOutput(createOutputCentered<PJ301MPort>(
-                mm2px(Vec(7.62, 30 + i * 20)), 
+                mm2px(Vec(15.24, eegStart + i * eegSpacing)), 
                 module, 
                 MuseHeadband::EEG1_OUTPUT + i
             ));
         }
 
-        // Brain wave band outputs
-        const char* labels[] = {"δ", "θ", "α", "β", "γ"};
+        // Brainwave Section
+        addChild(new ThemedLabel(mm2px(Vec(15.24, 210)), "WAVES", true));
+
+        // Brainwave outputs
+        const float waveStart = 240;
+        const float waveSpacing = 30;
+        const char* waveLabels[] = {
+            "δ DELTA", "θ THETA", "α ALPHA", "β BETA", "γ GAMMA"
+        };
+        
         for (int i = 0; i < 5; i++) {
+            addChild(new ThemedLabel(
+                mm2px(Vec(15.24, waveStart - 5 + i * waveSpacing)),
+                waveLabels[i]
+            ));
             addOutput(createOutputCentered<PJ301MPort>(
-                mm2px(Vec(7.62, 110 + i * 20)), 
+                mm2px(Vec(15.24, waveStart + i * waveSpacing)), 
                 module, 
                 MuseHeadband::DELTA_OUTPUT + i
             ));
