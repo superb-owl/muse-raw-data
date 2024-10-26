@@ -437,12 +437,12 @@ struct MuseHeadbandWidget : ModuleWidget {
         const float eegSpacing = 20;
         for (int i = 0; i < 4; i++) {
             addChild(new ThemedLabel(
-                mm2px(Vec(10, eegStart + i * eegSpacing)),
+                mm2px(Vec(x_center, eegStart + i * eegSpacing)),
 
                 string::f("CH %d", i + 1)
             ));
             addOutput(createOutputCentered<PJ301MPort>(
-                mm2px(Vec(35, eegStart + i * eegSpacing)), 
+                mm2px(Vec(x_center, eegStart + i * eegSpacing)), 
                 module, 
                 MuseHeadband::EEG1_OUTPUT + i
             ));
@@ -460,11 +460,11 @@ struct MuseHeadbandWidget : ModuleWidget {
         
         for (int i = 0; i < 5; i++) {
             addChild(new ThemedLabel(
-                mm2px(Vec(10, waveStart + i * waveSpacing)),
+                mm2px(Vec(x_center, waveStart + i * waveSpacing)),
                 waveLabels[i]
             ));
             addOutput(createOutputCentered<PJ301MPort>(
-                mm2px(Vec(35, waveStart + i * waveSpacing)), 
+                mm2px(Vec(x_center, waveStart + i * waveSpacing)), 
                 module, 
                 MuseHeadband::DELTA_OUTPUT + i
             ));
