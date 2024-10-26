@@ -54,16 +54,52 @@ namespace easywsclient {
                 if (connect(sockfd, p->ai_addr, p->ai_addrlen) != -1) {
                     break;
                 }
-                ::close(sockfd);  // Fixed: Using global close
+                ::close(sockfd);
                 sockfd = -1;
             }
             freeaddrinfo(result);
             
             if (sockfd != -1) {
-                WebSocket* ws = new WebSocket();
-                ws->sockfd = sockfd;
-                ws->state = OPEN;
-                return ws;
+                // Send WebSocket handshake
+                std::string handshake = 
+                    "GET / HTTP/1.1\r\n"
+                    "Host: " + std::string(host) + ":" + sport + "\r\n"
+                    "Upgrade: websocket\r\n"
+                    "Connection: Upgrade\r\n"
+                    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"  // This is a static key for simplicity
+                    "Sec-WebSocket-Version: 13\r\n"
+                    "\r\n";
+                    
+                INFO("Sending WebSocket handshake: %s", handshake.c_str());
+                if (::send(sockfd, handshake.c_str(), handshake.length(), 0) < 0) {
+                    WARN("Failed to send handshake");
+                    ::close(sockfd);
+                    return nullptr;
+                }
+
+                // Receive handshake response
+                char buffer[1024];
+                ssize_t bytes = recv(sockfd, buffer, sizeof(buffer)-1, 0);
+                if (bytes > 0) {
+                    buffer[bytes] = '\0';
+                    INFO("Received handshake response: %s", buffer);
+                    
+                    // Check if response contains "101 Switching Protocols"
+                    if (strstr(buffer, "101 Switching Protocols") == nullptr) {
+                        WARN("Invalid handshake response");
+                        ::close(sockfd);
+                        return nullptr;
+                    }
+                    
+                    WebSocket* ws = new WebSocket();
+                    ws->sockfd = sockfd;
+                    ws->state = OPEN;
+                    return ws;
+                }
+                
+                WARN("No handshake response received");
+                ::close(sockfd);
+                return nullptr;
             }
             return nullptr;
         }
