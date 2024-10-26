@@ -69,7 +69,7 @@ namespace easywsclient {
                     "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"  // This is a static key for simplicity
                     "Sec-WebSocket-Version: 13\r\n"
                     "\r\n";
-                    
+
                 INFO("Sending WebSocket handshake: %s", handshake.c_str());
                 if (::send(sockfd, handshake.c_str(), handshake.length(), 0) < 0) {
                     WARN("Failed to send handshake");
@@ -83,20 +83,20 @@ namespace easywsclient {
                 if (bytes > 0) {
                     buffer[bytes] = '\0';
                     INFO("Received handshake response: %s", buffer);
-                    
+
                     // Check if response contains "101 Switching Protocols"
                     if (strstr(buffer, "101 Switching Protocols") == nullptr) {
                         WARN("Invalid handshake response");
                         ::close(sockfd);
                         return nullptr;
                     }
-                    
+
                     WebSocket* ws = new WebSocket();
                     ws->sockfd = sockfd;
                     ws->state = OPEN;
                     return ws;
                 }
-                
+
                 WARN("No handshake response received");
                 ::close(sockfd);
                 return nullptr;
@@ -170,7 +170,7 @@ struct MuseHeadband : Module {
 
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-        
+
         // Configure outputs
         configOutput(EEG1_OUTPUT, "EEG Channel 1");
         configOutput(EEG2_OUTPUT, "EEG Channel 2");
