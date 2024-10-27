@@ -26,9 +26,22 @@ struct ChannelStats {
     float min = std::numeric_limits<float>::infinity();
 };
 
-void printChannelStats(const ChannelStats& stats) {
+// Function to normalize a value
+float normalizeValue(float value, const ChannelStats& stats) {
     float avg = stats.sum / stats.samples.size();
-    INFO("Channel stats: sum=%f, avg=%f, max=%f, min=%f, samples=%d", stats.sum, avg, stats.max, stats.min, stats.samples.size());
+    float range = stats.max - stats.min;
+    // INFO("Value: %f, Avg: %f, Range: %f", value, avg, range);
+    if (range == 0) return avg;
+    float normalized = (value - stats.min) / range;
+    return (normalized - 0.5f) * 10.f;
+}
+
+
+void printChannelStats(const ChannelStats& stats, float sample) {
+    float avg = stats.sum / stats.samples.size();
+    float norm = normalizeValue(sample, stats);
+    INFO("Samples: %d, Sum: %f, Avg: %f, Max: %f, Min: %f, Current: %f, Normalized: %f", 
+        stats.samples.size(), stats.sum, avg, stats.max, stats.min, sample, norm);
 }
 
 // Function to update channel statistics
@@ -55,17 +68,6 @@ void updateChannelStats(ChannelStats& stats, float sample, float sampleRate) {
         }
     }
 }
-
-// Function to normalize a value
-float normalizeValue(float value, const ChannelStats& stats) {
-    float avg = stats.sum / stats.samples.size();
-    float range = stats.max - stats.min;
-    // INFO("Value: %f, Avg: %f, Range: %f", value, avg, range);
-    if (range == 0) return avg;
-    float normalized = (value - stats.min) / range;
-    return (normalized - 0.5f) * 10.f;
-}
-
 
 struct MuseHeadband : Module {
     enum ParamId {
@@ -245,7 +247,9 @@ struct MuseHeadband : Module {
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
                     updateChannelStats(eegStats[i], current_sample[i], sample_rate);
-                    // printChannelStats(eegStats[i]);
+                    if (i == 0) {
+                        printChannelStats(eegStats[i], current_sample[i]);
+                    }
                     outputs[EEG1_OUTPUT + i].setVoltage(normalizeValue(current_sample[i], eegStats[i]));
                 }
             }
@@ -255,10 +259,6 @@ struct MuseHeadband : Module {
 
                 for (int i = 0; i < 3 && i < current_sample.size(); i++) {
                     updateChannelStats(ppgStats[i], current_sample[i], sample_rate);
-                    if (i == 1) {
-                        printChannelStats(ppgStats[i]);
-                        INFO("normalized value: %f -> %f", current_sample[i], normalizeValue(current_sample[i], ppgStats[i]));
-                    }
                     outputs[PPG1_OUTPUT + i].setVoltage(normalizeValue(current_sample[i], ppgStats[i]));
                 }
             }
