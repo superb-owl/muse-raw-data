@@ -41,7 +41,6 @@ class GenericSignalStreamer:
         self.n_chan = info.channel_count()
         self.data = np.zeros((self.n_samples, self.n_chan))
         self.times = np.arange(-self.window, 0, 1. / self.sfreq)
-        print("set up firwin", self.sfreq, self.n_chan)
         firwin_size = EEG_FIRWIN_SIZE if self.signal_type == 'EEG' else PPG_FIRWIN_SIZE
         self.bf = firwin(32, np.array([1, self.firwin_size]) / (self.sfreq / 2.), width=0.05,
                  pass_zero=False)
@@ -56,12 +55,10 @@ class GenericSignalStreamer:
         samples, timestamps = self.inlet.pull_chunk(max_samples=self.samples_per_chunk)
         if not timestamps or len(timestamps) == 1:
             return [], []
-        print('ts', self.signal_type, timestamps)
 
         timestamps = np.float64(np.arange(len(timestamps)))
         timestamps /= self.sfreq
         timestamps += self.times[-1] + 1. / self.sfreq
-        print('times', self.times, timestamps)
         self.times = np.concatenate([self.times, timestamps])
         self.n_samples = int(self.sfreq * self.window)
         self.times = self.times[-self.n_samples:]
@@ -85,6 +82,8 @@ class BioSignalStreamer:
         self.clients = set()
         self.eeg_streamer = GenericSignalStreamer('EEG', EEG_SAMPLE_RATE, params.NUM_EEG_SENSORS, EEG_SAMPLES_PER_CHUNK)
         self.ppg_streamer = GenericSignalStreamer('PPG', PPG_SAMPLE_RATE, params.NUM_PPG_SENSORS, PPG_SAMPLES_PER_CHUNK)
+        self.data_buffer = []
+        self.buffer_lock = asyncio.Lock()
 
     async def handle_client(self, websocket, path):
         print(f"New client connected from {websocket.remote_address}")
@@ -106,34 +105,47 @@ class BioSignalStreamer:
         await self.setup_streams()
         while True:
             await self.pull_samples()
+            await asyncio.sleep(0.01)  # Small delay to allow for collation
 
     async def pull_samples(self):
         eeg_data, eeg_times = await self.eeg_streamer.pull_samples()
         ppg_data, ppg_times = await self.ppg_streamer.pull_samples()
-        dataponts = []
-        if not eeg_data:
-            return
-        if not ppg_data:
-            print("No PPG data")
-            return
-        for i in range(len(eeg_data)):
-            time = eeg_times[i]
-            closest_ppg_time_index = ppg_times.index(min(ppg_times, key=lambda x:abs(x-time)))
-            datapoint = {
-                'timestamp': time,
-                'eeg_channels': eeg_data[i],
-                'ppg_channels': ppg_data[closest_ppg_time_index]
-            }
-            datapoints.append(datapoint)
 
-        if self.clients:
-            for datapoint in datapoints:
-                message = json.dumps(datapoint)
-                await asyncio.gather(
-                    *[client.send(message) for client in self.clients],
-                    return_exceptions=True
-                )
-        await asyncio.sleep(EEG_SAMPLES_PER_CHUNK / EEG_SAMPLE_RATE)
+        async with self.buffer_lock:
+            for i, eeg_time in enumerate(eeg_times):
+                # Find the closest PPG samples
+                ppg_indices = [j for j, ppg_time in enumerate(ppg_times) if abs(ppg_time - eeg_time) < 1/PPG_SAMPLE_RATE]
+
+                if ppg_indices:
+                    # Average PPG samples if multiple are found
+                    avg_ppg = np.mean([ppg_data[j] for j in ppg_indices], axis=0).tolist()
+                else:
+                    # Use the closest PPG sample if no exact match
+                    closest_ppg_index = min(range(len(ppg_times)), key=lambda j: abs(ppg_times[j] - eeg_time))
+                    avg_ppg = ppg_data[closest_ppg_index]
+
+                datapoint = {
+                    'timestamp': eeg_time,
+                    'eeg_channels': eeg_data[i],
+                    'ppg_channels': avg_ppg
+                }
+                self.data_buffer.append(datapoint)
+
+    async def send_data_to_clients(self):
+        while True:
+            print('send data', self.clients, len(self.data_buffer))
+            if self.clients:
+                async with self.buffer_lock:
+                    datapoints = self.data_buffer
+                    self.data_buffer = []
+
+                for datapoint in datapoints:
+                    message = json.dumps(datapoint)
+                    await asyncio.gather(
+                        *[client.send(message) for client in self.clients],
+                        return_exceptions=True
+                    )
+            await asyncio.sleep(0.1)  # Adjust this delay as needed
 
     async def run(self):
         server = await websockets.serve(self.handle_client, self.host, self.port)
@@ -142,7 +154,8 @@ class BioSignalStreamer:
         
         await asyncio.gather(
             server.wait_closed(),
-            self.stream_data()
+            self.stream_data(),
+            self.send_data_to_clients()
         )
 
 async def main():
