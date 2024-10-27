@@ -12,17 +12,42 @@ PPG_SAMPLE_RATE = 64
 EEG_SAMPLES_PER_CHUNK = 12
 PPG_SAMPLES_PER_CHUNK = EEG_SAMPLES_PER_CHUNK * (PPG_SAMPLE_RATE // EEG_SAMPLE_RATE)
 
+class GenericSignalStreamer:
+    def __init__(self, signal_type, sample_rate, num_sensors, samples_per_chunk):
+        self.signal_type = signal_type
+        self.sample_rate = sample_rate
+        self.num_sensors = num_sensors
+        self.samples_per_chunk = samples_per_chunk
+        self.inlet = None
+        self.buffer = np.zeros((int(params.BUFFER_LENGTH * sample_rate), num_sensors))
+        self.filter_state = None
+
+    async def setup_stream(self):
+        streams = []
+        while len(streams) == 0:
+            print(f"Waiting for {self.signal_type} stream...")
+            await asyncio.sleep(1)
+            streams = resolve_byprop('type', self.signal_type, timeout=2)
+        print(f"Got {self.signal_type} stream")
+        self.inlet = StreamInlet(streams[0], max_chunklen=self.samples_per_chunk)
+        print(f"{self.signal_type} sample rate:", self.inlet.info().nominal_srate())
+
+    async def pull_samples(self):
+        data, timestamps = self.inlet.pull_chunk(max_samples=self.samples_per_chunk)
+        if data:
+            data = np.array(data)
+            self.buffer, self.filter_state = util.update_buffer(
+                self.buffer, data, notch=True,
+                filter_state=self.filter_state)
+        return self.buffer[-1].tolist()
+
 class BioSignalStreamer:
     def __init__(self, host='0.0.0.0', port=8765):
         self.host = host
         self.port = port
         self.clients = set()
-        self.eeg_inlet = None
-        self.ppg_inlet = None
-        self.eeg_buffer = np.zeros((int(params.BUFFER_LENGTH * EEG_SAMPLE_RATE), params.NUM_EEG_SENSORS))
-        self.ppg_buffer = np.zeros((int(params.BUFFER_LENGTH * PPG_SAMPLE_RATE), params.NUM_PPG_SENSORS))
-        self.eeg_filter_state = None
-        self.ppg_filter_state = None
+        self.eeg_streamer = GenericSignalStreamer('EEG', EEG_SAMPLE_RATE, params.NUM_EEG_SENSORS, EEG_SAMPLES_PER_CHUNK)
+        self.ppg_streamer = GenericSignalStreamer('PPG', PPG_SAMPLE_RATE, params.NUM_PPG_SENSORS, PPG_SAMPLES_PER_CHUNK)
 
     async def handle_client(self, websocket, path):
         print(f"New client connected from {websocket.remote_address}")
@@ -35,19 +60,10 @@ class BioSignalStreamer:
             print(f"Client disconnected: {websocket.remote_address}")
 
     async def setup_streams(self):
-        eeg_streams = []
-        ppg_streams = []
-        while len(eeg_streams) == 0 or len(ppg_streams) == 0:
-            print("Waiting for streams...")
-            await asyncio.sleep(1)
-            eeg_streams = resolve_byprop('type', 'EEG', timeout=2)
-            ppg_streams = resolve_byprop('type', 'PPG', timeout=2)
-        print("got streams", len(eeg_streams), len(ppg_streams))
-
-        self.eeg_inlet = StreamInlet(eeg_streams[0], max_chunklen=EEG_SAMPLES_PER_CHUNK)
-        self.ppg_inlet = StreamInlet(ppg_streams[0], max_chunklen=PPG_SAMPLES_PER_CHUNK)
-
-        print("sample rates", self.eeg_inlet.info().nominal_srate(), self.ppg_inlet.info().nominal_srate())
+        await asyncio.gather(
+            self.eeg_streamer.setup_stream(),
+            self.ppg_streamer.setup_stream()
+        )
 
     async def stream_data(self):
         await self.setup_streams()
@@ -56,25 +72,13 @@ class BioSignalStreamer:
 
     async def pull_samples(self):
         timestamp = time.time()
-        eeg_data, eeg_timestamps = self.eeg_inlet.pull_chunk(max_samples=EEG_SAMPLES_PER_CHUNK)
-        ppg_data, ppg_timestamps = self.ppg_inlet.pull_chunk(max_samples=PPG_SAMPLES_PER_CHUNK)
-
-        if eeg_data:
-            eeg_data = np.array(eeg_data)
-            self.eeg_buffer, self.eeg_filter_state = util.update_buffer(
-                self.eeg_buffer, eeg_data, notch=True,
-                filter_state=self.eeg_filter_state)
-
-        if ppg_data:
-            ppg_data = np.array(ppg_data)
-            self.ppg_buffer, self.ppg_filter_state = util.update_buffer(
-                self.ppg_buffer, ppg_data, notch=True,
-                filter_state=self.ppg_filter_state)
+        eeg_data = await self.eeg_streamer.pull_samples()
+        ppg_data = await self.ppg_streamer.pull_samples()
 
         data = {
             'timestamp': timestamp,
-            'eeg_channels': self.eeg_buffer[-1].tolist(),
-            'ppg_channels': self.ppg_buffer[-1].tolist()
+            'eeg_channels': eeg_data,
+            'ppg_channels': ppg_data
         }
         message = json.dumps(data)
 
@@ -83,8 +87,6 @@ class BioSignalStreamer:
                 *[client.send(message) for client in self.clients],
                 return_exceptions=True
             )
-        else:
-            pass
         await asyncio.sleep(EEG_SAMPLES_PER_CHUNK / EEG_SAMPLE_RATE)
 
     async def run(self):
