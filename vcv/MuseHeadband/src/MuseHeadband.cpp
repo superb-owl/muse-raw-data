@@ -59,8 +59,6 @@ struct MuseHeadband : Module {
 
 
 
-    std::string messageBuffer;  // Buffer for incomplete messages
-
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
@@ -85,28 +83,27 @@ struct MuseHeadband : Module {
                     connected = (ws != nullptr);
                     if (connected) {
                         INFO("Connected to Muse Headband server");
-                        messageBuffer.clear();
                     } else {
                         WARN("Failed to connect to Muse Headband server");
                     }
                 }
                 
                 if (connected) {
-                    char buffer[1024];
+                    INFO("connected");
+                    char buffer[2048];
                     size_t bytesRead;
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
+                        INFO("Received %d bytes", bytesRead);
                         buffer[bytesRead] = '\0';
                         std::string message(buffer, bytesRead);
                         
-                        // Add to message buffer
-                        messageBuffer += message;
-                        
                         // Check if we have a complete JSON message
-                        if (!messageBuffer.empty() && 
-                            messageBuffer[0] == '{' && 
-                            messageBuffer[messageBuffer.length()-1] == '}') {
-                            parseMuseData(messageBuffer.c_str());
-                            messageBuffer.clear();
+                        if (!message.empty() && 
+                            message[0] == '{' && 
+                            message[message.length()-1] == '}') {
+                            parseMuseData(message.c_str());
+                        } else {
+                            WARN("Invalid JSON message");
                         }
                     }
                 }
@@ -117,6 +114,7 @@ struct MuseHeadband : Module {
     }
 
     void parseMuseData(const char* jsonStr) {
+        INFO("Received JSON");
         json_error_t error;
         json_t* root = json_loads(jsonStr, 0, &error);
         
