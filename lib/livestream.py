@@ -12,7 +12,7 @@ from scipy.signal import lfilter, lfilter_zi, firwin
 EEG_SAMPLE_RATE = 256
 PPG_SAMPLE_RATE = 64
 EEG_SAMPLES_PER_CHUNK = 12
-PPG_SAMPLES_PER_CHUNK = EEG_SAMPLES_PER_CHUNK * (PPG_SAMPLE_RATE // EEG_SAMPLE_RATE)
+PPG_SAMPLES_PER_CHUNK = int(EEG_SAMPLES_PER_CHUNK * (PPG_SAMPLE_RATE / EEG_SAMPLE_RATE))
 EEG_FIRWIN_SIZE = 40
 PPG_FIRWIN_SIZE = 10
 
@@ -82,7 +82,8 @@ class BioSignalStreamer:
         self.clients = set()
         self.eeg_streamer = GenericSignalStreamer('EEG', EEG_SAMPLE_RATE, params.NUM_EEG_SENSORS, EEG_SAMPLES_PER_CHUNK)
         self.ppg_streamer = GenericSignalStreamer('PPG', PPG_SAMPLE_RATE, params.NUM_PPG_SENSORS, PPG_SAMPLES_PER_CHUNK)
-        self.data_buffer = []
+        self.eeg_buffer = []
+        self.ppg_buffer = []
         self.buffer_lock = asyncio.Lock()
 
     async def handle_client(self, websocket, path):
@@ -117,18 +118,33 @@ class BioSignalStreamer:
                 datapoint = {
                     'timestamp': eeg_time,
                     'eeg_channels': eeg_data[i],
-                    'ppg_channels': [0,0,0],
                 }
-                self.data_buffer.append(datapoint)
+                self.eeg_buffer.append(datapoint)
+
+            for i, ppg_time in enumerate(ppg_times):
+                datapoint = {
+                    'timestamp': ppg_time,
+                    'ppg_channels': ppg_data[i],
+                }
+                self.ppg_buffer.append(datapoint)
+
 
     async def send_data_to_clients(self):
         while True:
-            print("Sending data to clients", len(self.data_buffer))
+            print("Sending data to clients", len(self.eeg_buffer))
+            if not self.eeg_buffer or not self.ppg_buffer:
+                await asyncio.sleep(0.1)
+                continue
             async with self.buffer_lock:
-                datapoints = self.data_buffer
-                self.data_buffer = []
+                eeg_points = self.eeg_buffer
+                ppg_points = self.ppg_buffer
+                self.eeg_buffer = []
+                self.ppg_buffer = []
+            for datapoint in eeg_points:
+                closest_ppg = min(ppg_points, key=lambda x: abs(x['timestamp'] - datapoint['timestamp']))
+                datapoint['ppg_channels'] = closest_ppg['ppg_channels']
             if self.clients:
-                for datapoint in datapoints:
+                for datapoint in eeg_points:
                     message = json.dumps(datapoint)
                     await asyncio.gather(
                         *[client.send(message) for client in self.clients],
