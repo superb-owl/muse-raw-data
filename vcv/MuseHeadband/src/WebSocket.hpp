@@ -181,14 +181,23 @@ namespace easywsclient {
                     
                     return true;
                 } else {
-                    // Keep the partial data in messageBuffer
-                    // DEBUG("Incomplete frame, buffered %zu bytes", messageBuffer.size());
+                    DEBUG("Incomplete frame, buffered %zu bytes", messageBuffer.size());
+                }
+            } else if (bytes == 0) {
+                WARN("Connection closed by peer");
+                state = CLOSED;
+                return false;
+            } else {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    DEBUG("No data available, would block");
+                } else {
+                    WARN("Failed to receive data: %s", strerror(errno));
                 }
             }
             
-            WARN("Failed to receive data");
             return false;
         }
+
 
         void close() {
             if (sockfd != -1) {
@@ -203,3 +212,4 @@ namespace easywsclient {
         }
     };
 }
+

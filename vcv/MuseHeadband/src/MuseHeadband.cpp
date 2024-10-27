@@ -137,8 +137,8 @@ struct MuseHeadband : Module {
                 return;
             }
             eeg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
-            eeg_samples.push_back(std::move(eeg_channel_values));
         }
+        eeg_samples.push_back(std::move(eeg_channel_values));
 
         json_t* ppg_channels = json_object_get(root, "ppg_channels");
         if (!json_is_array(ppg_channels)) {
@@ -154,8 +154,8 @@ struct MuseHeadband : Module {
                 return;
             }
             ppg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
-            ppg_samples.push_back(std::move(ppg_channel_values));
         }
+        ppg_samples.push_back(std::move(ppg_channel_values));
 
     }
 
