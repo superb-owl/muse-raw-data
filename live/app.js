@@ -33,11 +33,18 @@ const averageWindow = 50; // Number of frames to average
 
 function movingAverage(arr, window) {
     if (arr.length < window) {
-        return arr[arr.length - 1] || 0;
+        return arr;
     }
-    const validValues = arr.slice(-window).filter(val => !isNaN(val));
-    return validValues.length > 0 ? validValues.reduce((acc, val) => acc + val, 0) / validValues.length : 0;
+    const result = [];
+    for (let i = window - 1; i < arr.length; i++) {
+        const windowSlice = arr.slice(i - window + 1, i + 1);
+        const validValues = windowSlice.filter(val => !isNaN(val));
+        const avg = validValues.length > 0 ? validValues.reduce((acc, val) => acc + val, 0) / validValues.length : NaN;
+        result.push(avg);
+    }
+    return result;
 }
+
 
 function createGraph(index, label) {
     const yPos = index * (height + margin.top + margin.bottom + graphGap);
@@ -78,7 +85,8 @@ function updateGraph() {
     x.domain([0, maxDataPoints - 1]);
 
     const updateLine = (values, index) => {
-        const filteredValues = values.filter(val => !isNaN(val));
+        const smoothedValues = movingAverage(values, averageWindow);
+        const filteredValues = smoothedValues.filter(val => !isNaN(val));
         if (filteredValues.length > 0) {
             y.domain([d3.min(filteredValues), d3.max(filteredValues)]);
             graphs[index].datum(filteredValues).attr("d", line);
@@ -100,12 +108,7 @@ ws.onmessage = (event) => {
             if (data.eegRaw[i].length > maxDataPoints) {
                 data.eegRaw[i].shift();
             }
-            // Apply moving average
-            const avgValue = movingAverage(data.eegRaw[i], averageWindow);
-            data.eeg[i].push(avgValue);
-            if (data.eeg[i].length > maxDataPoints) {
-                data.eeg[i].shift();
-            }
+            data.eeg[i] = [...data.eegRaw[i]];
         }
     });
 
@@ -115,12 +118,7 @@ ws.onmessage = (event) => {
             if (data.ppgRaw[i].length > maxDataPoints) {
                 data.ppgRaw[i].shift();
             }
-            // Apply moving average
-            const avgValue = movingAverage(data.ppgRaw[i], averageWindow);
-            data.ppg[i].push(avgValue);
-            if (data.ppg[i].length > maxDataPoints) {
-                data.ppg[i].shift();
-            }
+            data.ppg[i] = [...data.ppgRaw[i]];
         }
     });
 
