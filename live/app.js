@@ -30,6 +30,7 @@ let data = {
 
 const maxDataPoints = 256 * 5; // Assuming 256Hz sampling rate
 const averageWindow = 50; // Number of frames to average
+let newDataAvailable = false;
 
 function movingAverage(arr, window) {
     if (arr.length < window) {
@@ -82,6 +83,8 @@ const graphs = [
 ];
 
 function updateGraph() {
+    if (!newDataAvailable) return;
+
     x.domain([0, maxDataPoints - 1]);
 
     const updateLine = (values, index) => {
@@ -95,13 +98,20 @@ function updateGraph() {
 
     data.eeg.forEach((values, i) => updateLine(values, i));
     data.ppg.forEach((values, i) => updateLine(values, i + 4));
+
+    newDataAvailable = false;
+}
+
+function redrawLoop() {
+    updateGraph();
+    requestAnimationFrame(redrawLoop);
 }
 
 const ws = new WebSocket("ws://0.0.0.0:8765");
 
 ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    
+
     message.eeg_channels.forEach((value, i) => {
         if (!isNaN(value)) {
             data.eegRaw[i].push(value);
@@ -122,8 +132,11 @@ ws.onmessage = (event) => {
         }
     });
 
-    updateGraph();
+    newDataAvailable = true;
 };
+
+// Start the redraw loop
+redrawLoop();
 
 ws.onerror = (error) => {
     console.error("WebSocket error:", error);

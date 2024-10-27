@@ -123,6 +123,7 @@ class BioSignalStreamer:
 
     async def send_data_to_clients(self):
         while True:
+            print("Sending data to clients", len(self.data_buffer))
             async with self.buffer_lock:
                 datapoints = self.data_buffer
                 self.data_buffer = []
