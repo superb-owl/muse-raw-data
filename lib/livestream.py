@@ -55,10 +55,12 @@ class GenericSignalStreamer:
         samples, timestamps = self.inlet.pull_chunk(max_samples=self.samples_per_chunk)
         if not timestamps or len(timestamps) == 1:
             return [], []
+        num_samples = len(timestamps)
 
-        timestamps = np.float64(np.arange(len(timestamps)))
-        timestamps /= self.sfreq
-        timestamps += self.times[-1] + 1. / self.sfreq
+        # print("timestamps", timestamps)
+        # timestamps = np.float64(np.arange(len(timestamps)))
+        # timestamps /= self.sfreq
+        # timestamps += self.times[-1] + 1. / self.sfreq
         self.times = np.concatenate([self.times, timestamps])
         self.n_samples = int(self.sfreq * self.window)
         self.times = self.times[-self.n_samples:]
@@ -71,8 +73,8 @@ class GenericSignalStreamer:
         self.data_f = np.vstack([self.data_f, filt_samples])
         self.data_f = self.data_f[-self.n_samples:]
 
-        new_data = self.data_f[-self.samples_per_chunk:].tolist()
-        new_times = self.times[-self.samples_per_chunk:].tolist()
+        new_data = self.data_f[-num_samples:].tolist()
+        new_times = self.times[-num_samples:].tolist()
         return new_data, new_times
 
 class BioSignalStreamer:
@@ -114,7 +116,6 @@ class BioSignalStreamer:
 
         async with self.buffer_lock:
             for i, eeg_time in enumerate(eeg_times):
-
                 datapoint = {
                     'timestamp': eeg_time,
                     'eeg_channels': eeg_data[i],
@@ -131,7 +132,6 @@ class BioSignalStreamer:
 
     async def send_data_to_clients(self):
         while True:
-            print("Sending data to clients", len(self.eeg_buffer))
             if not self.eeg_buffer or not self.ppg_buffer:
                 await asyncio.sleep(0.1)
                 continue
@@ -143,14 +143,42 @@ class BioSignalStreamer:
             for datapoint in eeg_points:
                 closest_ppg = min(ppg_points, key=lambda x: abs(x['timestamp'] - datapoint['timestamp']))
                 datapoint['ppg_channels'] = closest_ppg['ppg_channels']
-            if self.clients:
-                for datapoint in eeg_points:
-                    message = json.dumps(datapoint)
-                    await asyncio.gather(
-                        *[client.send(message) for client in self.clients],
-                        return_exceptions=True
-                    )
+            for datapoint in eeg_points:
+                await self.send_datapoint_to_clients(datapoint)
             await asyncio.sleep(0.1)  # Adjust this delay as needed
+
+
+    async def send_datapoint_to_clients(self, datapoint):
+        if hasattr(self, 'latest_timestamp'):
+            if datapoint['timestamp'] < self.latest_timestamp:
+                print("Out of order data", datapoint['timestamp'], self.latest_timestamp)
+        else:
+            self.latest_timestamp = datapoint['timestamp']
+            self.first_timestamp = datapoint['timestamp']
+
+        if hasattr(self, 'current_second'):
+            new_second = int(datapoint['timestamp'])
+            if new_second != self.current_second:
+                print("New second", self.current_second, self.datapoints_this_second)
+                self.current_second = new_second
+                self.datapoints_this_second = 0
+
+        if not hasattr(self, 'datapoints_this_second'):
+            self.datapoints_this_second = 0
+
+
+        self.latest_timestamp = datapoint['timestamp']
+        self.current_second = int(self.latest_timestamp)
+        self.datapoints_this_second += 1
+        datapoint['timestamp'] = datapoint['timestamp'] - self.first_timestamp
+        # print("Sending data", datapoint['timestamp'], self.current_second, self.datapoints_this_second)
+        message = json.dumps(datapoint)
+        if self.clients:
+            await asyncio.gather(
+                *[client.send(message) for client in self.clients],
+                return_exceptions=True
+            )
+
 
     async def run(self):
         server = await websockets.serve(self.handle_client, self.host, self.port)

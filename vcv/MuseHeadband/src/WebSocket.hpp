@@ -158,7 +158,7 @@ namespace easywsclient {
             }
             
             // Use a large temporary buffer for receiving data
-            char tempBuffer[131072];  // 128KB buffer
+            char tempBuffer[2048];
             ssize_t bytes = recv(sockfd, tempBuffer, sizeof(tempBuffer), 0);
             
             if (bytes > 0) {

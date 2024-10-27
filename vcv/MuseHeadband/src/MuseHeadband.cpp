@@ -126,6 +126,7 @@ struct MuseHeadband : Module {
         wsThread = std::thread([this]() {
             int currentSecond = 0;
             int samplesThisSecond = 0;
+            float lastTimestamp = 0.0f;
             while (running) {
                 if (!ws || ws->getReadyState() != easywsclient::OPEN) {
                     ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8765"));
@@ -149,7 +150,10 @@ struct MuseHeadband : Module {
                             message[0] == '{' && 
                             message[message.length()-1] == '}') {
                             float ts = parseMuseData(message.c_str());
-                            // floor ts
+                            if (ts <= lastTimestamp) {
+                                WARN("Received out-of-order timestamp: %f -> %f", lastTimestamp, ts);
+                            }
+                            lastTimestamp = ts;
                             int thisSecond = (int)ts;
                             if (currentSecond != thisSecond) {
                                 INFO("Received %d samples in the last second", samplesThisSecond);
