@@ -7,10 +7,14 @@ from pylsl import StreamInlet, resolve_byprop
 import lib.params as params
 import lib.util as util
 
+from scipy.signal import lfilter, lfilter_zi, firwin
+
 EEG_SAMPLE_RATE = 256
 PPG_SAMPLE_RATE = 64
 EEG_SAMPLES_PER_CHUNK = 12
 PPG_SAMPLES_PER_CHUNK = EEG_SAMPLES_PER_CHUNK * (PPG_SAMPLE_RATE // EEG_SAMPLE_RATE)
+EEG_FIRWIN_SIZE = 40
+PPG_FIRWIN_SIZE = 10
 
 class GenericSignalStreamer:
     def __init__(self, signal_type, sample_rate, num_sensors, samples_per_chunk):
@@ -19,8 +23,8 @@ class GenericSignalStreamer:
         self.num_sensors = num_sensors
         self.samples_per_chunk = samples_per_chunk
         self.inlet = None
-        self.buffer = np.zeros((int(params.BUFFER_LENGTH * sample_rate), num_sensors))
-        self.filter_state = None
+        self.window = 5 # what is this?
+        self.firwin_size = EEG_FIRWIN_SIZE if self.signal_type == 'EEG' else PPG_FIRWIN_SIZE
 
     async def setup_stream(self):
         streams = []
@@ -31,15 +35,48 @@ class GenericSignalStreamer:
         print(f"Got {self.signal_type} stream")
         self.inlet = StreamInlet(streams[0], max_chunklen=self.samples_per_chunk)
         print(f"{self.signal_type} sample rate:", self.inlet.info().nominal_srate())
+        info = self.inlet.info()
+        self.sfreq = info.nominal_srate()
+        self.n_samples = int(self.sfreq * self.window)
+        self.n_chan = info.channel_count()
+        self.data = np.zeros((self.n_samples, self.n_chan))
+        self.times = np.arange(-self.window, 0, 1. / self.sfreq)
+        print("set up firwin", self.sfreq, self.n_chan)
+        firwin_size = EEG_FIRWIN_SIZE if self.signal_type == 'EEG' else PPG_FIRWIN_SIZE
+        self.bf = firwin(32, np.array([1, self.firwin_size]) / (self.sfreq / 2.), width=0.05,
+                 pass_zero=False)
+        self.af = [1.0]
+
+        zi = lfilter_zi(self.bf, self.af)
+        self.filt_state = np.tile(zi, (self.n_chan, 1)).transpose()
+        self.data_f = np.zeros((self.n_samples, self.n_chan))
+
 
     async def pull_samples(self):
-        data, timestamps = self.inlet.pull_chunk(max_samples=self.samples_per_chunk)
-        if data:
-            data = np.array(data)
-            self.buffer, self.filter_state = util.update_buffer(
-                self.buffer, data, notch=True,
-                filter_state=self.filter_state)
-        return self.buffer[-1].tolist()
+        samples, timestamps = self.inlet.pull_chunk(max_samples=self.samples_per_chunk)
+        if not timestamps or len(timestamps) == 1:
+            return [], []
+        print('ts', self.signal_type, timestamps)
+
+        timestamps = np.float64(np.arange(len(timestamps)))
+        timestamps /= self.sfreq
+        timestamps += self.times[-1] + 1. / self.sfreq
+        print('times', self.times, timestamps)
+        self.times = np.concatenate([self.times, timestamps])
+        self.n_samples = int(self.sfreq * self.window)
+        self.times = self.times[-self.n_samples:]
+        self.data = np.vstack([self.data, samples])
+        self.data = self.data[-self.n_samples:]
+        filt_samples, self.filt_state = lfilter(
+            self.bf, self.af,
+            samples,
+            axis=0, zi=self.filt_state)
+        self.data_f = np.vstack([self.data_f, filt_samples])
+        self.data_f = self.data_f[-self.n_samples:]
+
+        new_data = self.data_f[-self.samples_per_chunk:].tolist()
+        new_times = self.times[-self.samples_per_chunk:].tolist()
+        return new_data, new_times
 
 class BioSignalStreamer:
     def __init__(self, host='0.0.0.0', port=8765):
@@ -71,22 +108,31 @@ class BioSignalStreamer:
             await self.pull_samples()
 
     async def pull_samples(self):
-        timestamp = time.time()
-        eeg_data = await self.eeg_streamer.pull_samples()
-        ppg_data = await self.ppg_streamer.pull_samples()
-
-        data = {
-            'timestamp': timestamp,
-            'eeg_channels': eeg_data,
-            'ppg_channels': ppg_data
-        }
-        message = json.dumps(data)
+        eeg_data, eeg_times = await self.eeg_streamer.pull_samples()
+        ppg_data, ppg_times = await self.ppg_streamer.pull_samples()
+        dataponts = []
+        if not eeg_data:
+            return
+        if not ppg_data:
+            print("No PPG data")
+            return
+        for i in range(len(eeg_data)):
+            time = eeg_times[i]
+            closest_ppg_time_index = ppg_times.index(min(ppg_times, key=lambda x:abs(x-time)))
+            datapoint = {
+                'timestamp': time,
+                'eeg_channels': eeg_data[i],
+                'ppg_channels': ppg_data[closest_ppg_time_index]
+            }
+            datapoints.append(datapoint)
 
         if self.clients:
-            await asyncio.gather(
-                *[client.send(message) for client in self.clients],
-                return_exceptions=True
-            )
+            for datapoint in datapoints:
+                message = json.dumps(datapoint)
+                await asyncio.gather(
+                    *[client.send(message) for client in self.clients],
+                    return_exceptions=True
+                )
         await asyncio.sleep(EEG_SAMPLES_PER_CHUNK / EEG_SAMPLE_RATE)
 
     async def run(self):
