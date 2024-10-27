@@ -117,6 +117,7 @@ class BioSignalStreamer:
                 datapoint = {
                     'timestamp': eeg_time,
                     'eeg_channels': eeg_data[i],
+                    'ppg_channels': [0,0,0],
                 }
                 self.data_buffer.append(datapoint)
 
