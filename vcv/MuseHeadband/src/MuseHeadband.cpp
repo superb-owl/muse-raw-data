@@ -124,6 +124,8 @@ struct MuseHeadband : Module {
 
         // Start WebSocket connection thread
         wsThread = std::thread([this]() {
+            int currentSecond = 0;
+            int samplesThisSecond = 0;
             while (running) {
                 if (!ws || ws->getReadyState() != easywsclient::OPEN) {
                     ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8765"));
@@ -146,7 +148,15 @@ struct MuseHeadband : Module {
                         if (!message.empty() && 
                             message[0] == '{' && 
                             message[message.length()-1] == '}') {
-                            parseMuseData(message.c_str());
+                            float ts = parseMuseData(message.c_str());
+                            // floor ts
+                            int thisSecond = (int)ts;
+                            if (currentSecond != thisSecond) {
+                                INFO("Received %d samples in the last second", samplesThisSecond);
+                                currentSecond = thisSecond;
+                                samplesThisSecond = 0;
+                            }
+                            samplesThisSecond++;
                         } else {
                             WARN("Invalid JSON message: %s", message.c_str());
                         }
@@ -157,32 +167,31 @@ struct MuseHeadband : Module {
                     WARN("Not connected to Muse Headband server");
                 }
                 
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         });
     }
 
-    void parseMuseData(const char* jsonStr) {
+    float parseMuseData(const char* jsonStr) {
         json_error_t error;
         json_t* root = json_loads(jsonStr, 0, &error);
         
         if (!root) {
             WARN("Failed to parse JSON: %s", error.text);
-            return;
+            return 0.0f;
         }
 
         json_t* timestamp = json_object_get(root, "timestamp");
         if (!json_is_number(timestamp)) {
             WARN("Invalid timestamp in JSON");
-            return;
+            return 0.0f;
         }
         float timestamp_value = json_number_value(timestamp);
-        INFO("timestamp: %f", timestamp_value);
+        // INFO("timestamp: %f", timestamp_value);
 
         json_t* eeg_channels = json_object_get(root, "eeg_channels");
         if (!json_is_array(eeg_channels)) {
             WARN("No EEG channels found in JSON");
-            return;
+            return timestamp_value;
         }
         size_t num_eeg_channels = json_array_size(eeg_channels);
         std::vector<float> eeg_channel_values;
@@ -190,18 +199,18 @@ struct MuseHeadband : Module {
             json_t* value = json_array_get(eeg_channels, i);
             if (!json_is_number(value)) {
                 WARN("Invalid EEG sample value");
-                return;
+                return timestamp_value;
             }
             eeg_channel_values.push_back(json_number_value(value));
         }
-        INFO("Received EEG sample: %f, %f, %f, %f, %f", 
-            eeg_channel_values[0], eeg_channel_values[1], eeg_channel_values[2], eeg_channel_values[3], eeg_channel_values[4]);
+        // INFO("Received EEG sample: %f, %f, %f, %f, %f", 
+        //    eeg_channel_values[0], eeg_channel_values[1], eeg_channel_values[2], eeg_channel_values[3], eeg_channel_values[4]);
         eeg_samples.push_back(std::move(eeg_channel_values));
 
         json_t* ppg_channels = json_object_get(root, "ppg_channels");
         if (!json_is_array(ppg_channels)) {
             WARN("No PPG channels found in JSON");
-            return;
+            return timestamp_value;
         }
         size_t num_ppg_channels = json_array_size(ppg_channels);
         std::vector<float> ppg_channel_values;
@@ -209,14 +218,14 @@ struct MuseHeadband : Module {
             json_t* value = json_array_get(ppg_channels, i);
             if (!json_is_number(value)) {
                 WARN("Invalid PPG sample value");
-                return;
+                return timestamp_value;
             }
             ppg_channel_values.push_back(json_number_value(value));
         }
-        INFO("Received PPG sample: %f, %f, %f", 
-            ppg_channel_values[0], ppg_channel_values[1], ppg_channel_values[2]);
+        //INFO("Received PPG sample: %f, %f, %f", 
+        //    ppg_channel_values[0], ppg_channel_values[1], ppg_channel_values[2]);
         ppg_samples.push_back(std::move(ppg_channel_values));
-
+        return timestamp_value;
     }
 
 
