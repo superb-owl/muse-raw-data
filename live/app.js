@@ -26,7 +26,7 @@ let data = {
     ppg: [[], [], []]
 };
 
-const maxDataPoints = 500; // Assuming 250Hz sampling rate, this will show 2 seconds of data
+const maxDataPoints = 1024; // Assuming 256Hz sampling rate
 
 function createGraph(index, label) {
     const yPos = index * (height + margin.top + margin.bottom + graphGap);
