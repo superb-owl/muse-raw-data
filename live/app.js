@@ -23,10 +23,21 @@ const colors = d3.schemeCategory10;
 
 let data = {
     eeg: [[], [], [], []],
-    ppg: [[], [], []]
+    ppg: [[], [], []],
+    eegRaw: [[], [], [], []],
+    ppgRaw: [[], [], []]
 };
 
-const maxDataPoints = 1024; // Assuming 256Hz sampling rate
+const maxDataPoints = 256 * 5; // Assuming 256Hz sampling rate
+const averageWindow = 50; // Number of frames to average
+
+function movingAverage(arr, window) {
+    if (arr.length < window) {
+        return arr[arr.length - 1] || 0;
+    }
+    const validValues = arr.slice(-window).filter(val => !isNaN(val));
+    return validValues.length > 0 ? validValues.reduce((acc, val) => acc + val, 0) / validValues.length : 0;
+}
 
 function createGraph(index, label) {
     const yPos = index * (height + margin.top + margin.bottom + graphGap);
@@ -67,8 +78,11 @@ function updateGraph() {
     x.domain([0, maxDataPoints - 1]);
 
     const updateLine = (values, index) => {
-        y.domain([d3.min(values), d3.max(values)]);
-        graphs[index].datum(values).attr("d", line);
+        const filteredValues = values.filter(val => !isNaN(val));
+        if (filteredValues.length > 0) {
+            y.domain([d3.min(filteredValues), d3.max(filteredValues)]);
+            graphs[index].datum(filteredValues).attr("d", line);
+        }
     };
 
     data.eeg.forEach((values, i) => updateLine(values, i));
@@ -81,16 +95,32 @@ ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
     
     message.eeg_channels.forEach((value, i) => {
-        data.eeg[i].push(value);
-        if (data.eeg[i].length > maxDataPoints) {
-            data.eeg[i].shift();
+        if (!isNaN(value)) {
+            data.eegRaw[i].push(value);
+            if (data.eegRaw[i].length > maxDataPoints) {
+                data.eegRaw[i].shift();
+            }
+            // Apply moving average
+            const avgValue = movingAverage(data.eegRaw[i], averageWindow);
+            data.eeg[i].push(avgValue);
+            if (data.eeg[i].length > maxDataPoints) {
+                data.eeg[i].shift();
+            }
         }
     });
 
     message.ppg_channels.forEach((value, i) => {
-        data.ppg[i].push(value);
-        if (data.ppg[i].length > maxDataPoints) {
-            data.ppg[i].shift();
+        if (!isNaN(value)) {
+            data.ppgRaw[i].push(value);
+            if (data.ppgRaw[i].length > maxDataPoints) {
+                data.ppgRaw[i].shift();
+            }
+            // Apply moving average
+            const avgValue = movingAverage(data.ppgRaw[i], averageWindow);
+            data.ppg[i].push(avgValue);
+            if (data.ppg[i].length > maxDataPoints) {
+                data.ppg[i].shift();
+            }
         }
     });
 
@@ -101,7 +131,11 @@ ws.onerror = (error) => {
     console.error("WebSocket error:", error);
 };
 
-ws.onclose = () => {
-    console.log("WebSocket connection closed");
+ws.onclose = (event) => {
+    if (event.wasClean) {
+        console.log(`WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason}`);
+    } else {
+        console.error('WebSocket connection died');
+    }
 };
 
