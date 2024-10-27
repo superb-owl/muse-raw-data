@@ -21,51 +21,37 @@
 // Data structures for tracking statistics
 struct ChannelStats {
     std::vector<float> samples;
-    float sum = 0.f;
     float max = -std::numeric_limits<float>::infinity();
     float min = std::numeric_limits<float>::infinity();
 };
 
 // Function to normalize a value
 float normalizeValue(float value, const ChannelStats& stats) {
-    float avg = stats.sum / stats.samples.size();
     float range = stats.max - stats.min;
-    // INFO("Value: %f, Avg: %f, Range: %f", value, avg, range);
-    if (range == 0) return avg;
+    if (range == 0) return stats.min;
     float normalized = (value - stats.min) / range;
     return (normalized - 0.5f) * 10.f;
 }
 
 
 void printChannelStats(const ChannelStats& stats, float sample) {
-    float avg = stats.sum / stats.samples.size();
     float norm = normalizeValue(sample, stats);
-    INFO("Samples: %d, Sum: %f, Avg: %f, Max: %f, Min: %f, Current: %f, Normalized: %f", 
-        stats.samples.size(), stats.sum, avg, stats.max, stats.min, sample, norm);
+    INFO("Samples: %d, Max: %f, Min: %f, Current: %f, Normalized: %f", 
+        stats.samples.size(), stats.max, stats.min, sample, norm);
 }
 
 // Function to update channel statistics
 void updateChannelStats(ChannelStats& stats, float sample, float sampleRate) {
     stats.samples.push_back(sample);
-    stats.sum += sample;
-    stats.max = std::max(stats.max, sample);
-    stats.min = std::min(stats.min, sample);
-
-    // Remove samples older than 1 second
-    while (stats.samples.size() > sampleRate * 10) {
-        INFO("Removing old sample");
-        float oldSample = stats.samples.front();
+    float secondsToKeep = 1.f;
+    while (stats.samples.size() > sampleRate * secondsToKeep) {
         stats.samples.erase(stats.samples.begin());
-        stats.sum -= oldSample;
-        // Recalculate max and min if necessary
-        if (oldSample == stats.max || oldSample == stats.min) {
-            stats.max = -std::numeric_limits<float>::infinity();
-            stats.min = std::numeric_limits<float>::infinity();
-            for (float s : stats.samples) {
-                stats.max = std::max(stats.max, s);
-                stats.min = std::min(stats.min, s);
-            }
-        }
+    }
+    stats.max = -std::numeric_limits<float>::infinity();
+    stats.min = std::numeric_limits<float>::infinity();
+    for (float s : stats.samples) {
+        stats.max = std::max(stats.max, s);
+        stats.min = std::min(stats.min, s);
     }
 }
 
@@ -247,9 +233,6 @@ struct MuseHeadband : Module {
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
                     updateChannelStats(eegStats[i], current_sample[i], sample_rate);
-                    if (i == 0) {
-                        printChannelStats(eegStats[i], current_sample[i]);
-                    }
                     outputs[EEG1_OUTPUT + i].setVoltage(normalizeValue(current_sample[i], eegStats[i]));
                 }
             }
