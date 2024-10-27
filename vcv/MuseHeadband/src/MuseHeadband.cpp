@@ -81,7 +81,7 @@ struct MuseHeadband : Module {
         wsThread = std::thread([this]() {
             while (running) {
                 if (!ws || ws->getReadyState() != easywsclient::OPEN) {
-                    ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8080"));
+                    ws.reset(easywsclient::WebSocket::create_connection("ws://localhost:8765"));
                     connected = (ws != nullptr);
                     if (connected) {
                         INFO("Connected to Muse Headband server");
