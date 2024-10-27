@@ -152,7 +152,10 @@ namespace easywsclient {
         }
 
         bool receive(char* buffer, size_t bufferSize, size_t* bytesRead) {
-            if (state != OPEN) return false;
+            if (state != OPEN) {
+                WARN("Socket not open");
+                return false;
+            }
             
             // Use a large temporary buffer for receiving data
             char tempBuffer[131072];  // 128KB buffer
@@ -183,6 +186,7 @@ namespace easywsclient {
                 }
             }
             
+            WARN("Failed to receive data");
             return false;
         }
 

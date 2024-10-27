@@ -103,7 +103,7 @@ struct MuseHeadband : Module {
                             message[message.length()-1] == '}') {
                             parseMuseData(message.c_str());
                         } else {
-                            WARN("Invalid JSON message");
+                            WARN("Invalid JSON message: %s", message.c_str());
                         }
                     }
                 }
