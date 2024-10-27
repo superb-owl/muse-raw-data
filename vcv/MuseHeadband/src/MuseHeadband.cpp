@@ -150,10 +150,14 @@ struct MuseHeadband : Module {
                         } else {
                             WARN("Invalid JSON message: %s", message.c_str());
                         }
+                    } else {
+                        WARN("Failed to receive message from Muse Headband server");
                     }
+                } else {
+                    WARN("Not connected to Muse Headband server");
                 }
                 
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         });
     }
@@ -166,6 +170,14 @@ struct MuseHeadband : Module {
             WARN("Failed to parse JSON: %s", error.text);
             return;
         }
+
+        json_t* timestamp = json_object_get(root, "timestamp");
+        if (!json_is_number(timestamp)) {
+            WARN("Invalid timestamp in JSON");
+            return;
+        }
+        float timestamp_value = json_number_value(timestamp);
+        INFO("timestamp: %f", timestamp_value);
 
         json_t* eeg_channels = json_object_get(root, "eeg_channels");
         if (!json_is_array(eeg_channels)) {
@@ -182,6 +194,8 @@ struct MuseHeadband : Module {
             }
             eeg_channel_values.push_back(json_number_value(value));
         }
+        INFO("Received EEG sample: %f, %f, %f, %f, %f", 
+            eeg_channel_values[0], eeg_channel_values[1], eeg_channel_values[2], eeg_channel_values[3], eeg_channel_values[4]);
         eeg_samples.push_back(std::move(eeg_channel_values));
 
         json_t* ppg_channels = json_object_get(root, "ppg_channels");
@@ -199,6 +213,8 @@ struct MuseHeadband : Module {
             }
             ppg_channel_values.push_back(json_number_value(value));
         }
+        INFO("Received PPG sample: %f, %f, %f", 
+            ppg_channel_values[0], ppg_channel_values[1], ppg_channel_values[2]);
         ppg_samples.push_back(std::move(ppg_channel_values));
 
     }
