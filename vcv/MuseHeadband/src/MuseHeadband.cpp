@@ -51,9 +51,9 @@ struct MuseHeadband : Module {
 
     // EEG data
     std::vector<std::vector<float>> eeg_samples;
-    float eeg_values[5] = {0.f, 0.f, 0.f, 0.f, 0.f};
-    float brain_waves[5] = {0.f, 0.f, 0.f, 0.f, 0.f}; // delta, theta, alpha, beta, gamma
-    int eeg_sample_rate = 256; // Default value, will be updated from JSON
+    std::vector<std::vector<float>> ppg_samples;
+    int eeg_sample_rate = 256;
+    int ppg_sample_rate = 64;
     float sample_time = 0.f; // Accumulator for sample timing
 
 
@@ -92,7 +92,7 @@ struct MuseHeadband : Module {
                 }
                 
                 if (connected) {
-                    char buffer[131072];  // 128KB buffer
+                    char buffer[1024];
                     size_t bytesRead;
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
                         buffer[bytesRead] = '\0';
@@ -125,67 +125,40 @@ struct MuseHeadband : Module {
             return;
         }
 
-        // Parse EEG sample rate
-        json_t* sample_rate = json_object_get(root, "eeg_sample_rate");
-        if (json_is_integer(sample_rate)) {
-            eeg_sample_rate = json_integer_value(sample_rate);
-            INFO("EEG sample rate: %d Hz", eeg_sample_rate);
+        json_t* eeg_channels = json_object_get(root, "eeg_channels");
+        if (!json_is_array(eeg_channels)) {
+            WARN("No EEG channels found in JSON");
+            return;
+        }
+        size_t num_eeg_channels = json_array_size(eeg_channels);
+        std::vector<float> eeg_channel_values;
+        for (size_t i = 0; i < num_eeg_channels; i++) {
+            json_t* value = json_array_get(eeg_channels, i);
+            if (!json_is_number(value)) {
+                WARN("Invalid EEG sample value");
+                return;
+            }
+            eeg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
+            eeg_samples.push_back(std::move(eeg_channel_values));
         }
 
-        json_t* eeg_buffer = json_object_get(root, "eeg_buffer");
-        if (json_is_array(eeg_buffer)) {
-            std::lock_guard<std::mutex> lock(dataMutex);
-            size_t buffer_size = json_array_size(eeg_buffer);
-            eeg_samples.clear();
-            eeg_samples.reserve(buffer_size);
-
-            for (size_t i = 0; i < buffer_size; i++) {
-                json_t* sample = json_array_get(eeg_buffer, i);
-                if (json_is_array(sample)) {
-                    std::vector<float> sample_values;
-                    size_t sample_size = json_array_size(sample);
-                    sample_values.reserve(sample_size);
-
-                    for (size_t j = 0; j < sample_size; j++) {
-                        json_t* value = json_array_get(sample, j);
-                        if (json_is_number(value)) {
-                            sample_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
-                        }
-                    }
-
-                    eeg_samples.push_back(std::move(sample_values));
-                }
+        json_t* ppg_channels = json_object_get(root, "ppg_channels");
+        if (!json_is_array(ppg_channels)) {
+            WARN("No PPG channels found in JSON");
+            return;
+        }
+        size_t num_ppg_channels = json_array_size(ppg_channels);
+        std::vector<float> ppg_channel_values;
+        for (size_t i = 0; i < num_ppg_channels; i++) {
+            json_t* value = json_array_get(ppg_channels, i);
+            if (!json_is_number(value)) {
+                WARN("Invalid PPG sample value");
+                return;
             }
-            INFO("Parsed %zu EEG samples", eeg_samples.size());
-
-            // Update eeg_values with the last sample for backwards compatibility
-            if (!eeg_samples.empty()) {
-                const auto& last_sample = eeg_samples.back();
-                for (size_t i = 0; i < 5 && i < last_sample.size(); i++) {
-                    eeg_values[i] = last_sample[i];
-                }
-            }
+            ppg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
+            ppg_samples.push_back(std::move(ppg_channel_values));
         }
 
-        // Parse brain wave bands
-        json_t* eeg_bands = json_object_get(root, "eeg_bands");
-        if (json_is_object(eeg_bands)) {
-            std::lock_guard<std::mutex> lock(dataMutex);
-            const char* band_names[] = {"delta", "theta", "alpha", "beta", "gamma"};
-            for (size_t i = 0; i < 5; i++) {
-                json_t* band = json_object_get(eeg_bands, band_names[i]);
-                if (json_is_array(band) && json_array_size(band) > 0) {
-                    json_t* first_value = json_array_get(band, 0);
-                    if (json_is_number(first_value)) {
-                        brain_waves[i] = json_number_value(first_value) / 100.0f; // Scale to reasonable voltage
-                    }
-                }
-            }
-        }
-
-        json_decref(root);
-        INFO("Parsed EEG values (last sample): %.2f, %.2f, %.2f, %.2f, %.2f", 
-              eeg_values[0], eeg_values[1], eeg_values[2], eeg_values[3], eeg_values[4]);
     }
 
 
@@ -224,11 +197,6 @@ struct MuseHeadband : Module {
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
                     outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 10.0);
                 }
-            }
-
-            // Output brain wave bands
-            for (int i = 0; i < 5; i++) {
-                outputs[DELTA_OUTPUT + i].setVoltage(brain_waves[i]);
             }
         }
     }
