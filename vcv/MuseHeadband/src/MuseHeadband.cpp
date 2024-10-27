@@ -36,6 +36,9 @@ struct MuseHeadband : Module {
         ALPHA_OUTPUT,
         BETA_OUTPUT,
         GAMMA_OUTPUT,
+        PPG1_OUTPUT,
+        PPG2_OUTPUT,
+        PPG3_OUTPUT,
         OUTPUTS_LEN
     };
     enum LightId {
@@ -56,8 +59,7 @@ struct MuseHeadband : Module {
     int ppg_sample_rate = 64;
     float sample_time = 0.f; // Accumulator for sample timing
 
-
-
+    float last_sample_time = 0.f;
 
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -73,6 +75,9 @@ struct MuseHeadband : Module {
         configOutput(ALPHA_OUTPUT, "Alpha waves (8-13 Hz)");
         configOutput(BETA_OUTPUT, "Beta waves (13-32 Hz)");
         configOutput(GAMMA_OUTPUT, "Gamma waves (32+ Hz)");
+        configOutput(PPG1_OUTPUT, "PPG Channel 1");
+        configOutput(PPG2_OUTPUT, "PPG Channel 2");
+        configOutput(PPG3_OUTPUT, "PPG Channel 3");
         INFO("MuseHeadband loaded");
 
         // Start WebSocket connection thread
@@ -89,11 +94,9 @@ struct MuseHeadband : Module {
                 }
                 
                 if (connected) {
-                    INFO("connected");
                     char buffer[2048];
                     size_t bytesRead;
                     if (ws->receive(buffer, sizeof(buffer), &bytesRead)) {
-                        INFO("Received %d bytes", bytesRead);
                         buffer[bytesRead] = '\0';
                         std::string message(buffer, bytesRead);
                         
@@ -114,7 +117,6 @@ struct MuseHeadband : Module {
     }
 
     void parseMuseData(const char* jsonStr) {
-        INFO("Received JSON");
         json_error_t error;
         json_t* root = json_loads(jsonStr, 0, &error);
         
@@ -153,7 +155,7 @@ struct MuseHeadband : Module {
                 WARN("Invalid PPG sample value");
                 return;
             }
-            ppg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
+            ppg_channel_values.push_back(json_number_value(value) / 100000.0f); // Convert to millivolts
         }
         ppg_samples.push_back(std::move(ppg_channel_values));
 
@@ -176,24 +178,28 @@ struct MuseHeadband : Module {
         lights[CONNECTION_LIGHT].setBrightness(connected ? 1.f : 0.f);
 
         std::lock_guard<std::mutex> lock(dataMutex);
-        
-        // Calculate time for one sample
-        float sample_period = 1.f / eeg_sample_rate;
-        
-        // Accumulate time
+
         sample_time += args.sampleTime;
-        
-        // Check if it's time to output a new sample
-        if (sample_time >= sample_period) {
-            sample_time -= sample_period;
-            
-            // Output EEG values
+
+        float eeg_sample_period = 1.f / eeg_sample_rate;
+
+        if (sample_time - last_sample_time >= eeg_sample_period) {
+            last_sample_time = sample_time;
             if (!eeg_samples.empty()) {
                 std::vector<float> current_sample = std::move(eeg_samples.front());
                 eeg_samples.erase(eeg_samples.begin());
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
                     outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 50.0);
+                }
+            }
+            if (!ppg_samples.empty()) {
+                std::vector<float> current_sample = std::move(ppg_samples.front());
+                ppg_samples.erase(ppg_samples.begin());
+
+                INFO("PPG sample: %f %f %f", current_sample[0], current_sample[1], current_sample[2]);
+                for (int i = 0; i < 3 && i < current_sample.size(); i++) {
+                    outputs[PPG1_OUTPUT + i].setVoltage(current_sample[i]);
                 }
             }
         }
@@ -231,6 +237,7 @@ struct MuseHeadbandWidget : ModuleWidget {
 
         float col_a_center = 10;
         float col_b_center = 40;
+        float col_c_center = 70;
 
         float row_start = 40;
 
@@ -282,6 +289,22 @@ struct MuseHeadbandWidget : ModuleWidget {
                 mm2px(Vec(col_b_center, waveStart + i * waveSpacing)), 
                 module, 
                 MuseHeadband::DELTA_OUTPUT + i
+            ));
+        }
+
+        // PPG Section
+        addChild(new ThemedLabel(mm2px(Vec(col_c_center, row_start)), "PPG", true));
+        const float ppgStart = row_start + 15;
+        const float ppgSpacing = 15;
+        for (int i = 0; i < 3; i++) {
+            addChild(new ThemedLabel(
+                mm2px(Vec(col_c_center, ppgStart + i * ppgSpacing - 5)),
+                string::f("CH %d", i + 1)
+            ));
+            addOutput(createOutputCentered<PJ301MPort>(
+                mm2px(Vec(col_c_center, ppgStart + i * ppgSpacing)), 
+                module, 
+                MuseHeadband::PPG1_OUTPUT + i
             ));
         }
     }
