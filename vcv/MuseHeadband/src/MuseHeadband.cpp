@@ -193,7 +193,7 @@ struct MuseHeadband : Module {
                 eeg_samples.erase(eeg_samples.begin());
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
-                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 10.0);
+                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 50.0);
                 }
             }
         }
