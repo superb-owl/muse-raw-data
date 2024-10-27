@@ -30,6 +30,7 @@ class BioSignalStreamer:
         self.ppg_simulator = PPGSimulator()
         self.ppg_buffer = []
         self.ppg_counter = 0
+        self.last_ppg_sample = [0] * self.ppg_simulator.num_channels
 
     async def handle_client(self, websocket, path):
         print(f"New client connected from {websocket.remote_address}")
@@ -52,13 +53,15 @@ class BioSignalStreamer:
                 self.ppg_counter = 0
                 ppg_sample = self.ppg_simulator.get_sample()
                 self.ppg_buffer.append(ppg_sample)
+                self.last_ppg_sample = ppg_sample
 
-            # Average PPG samples if available
+            # Average PPG samples if available, otherwise use the last known sample
             if self.ppg_buffer:
                 avg_ppg_sample = np.mean(self.ppg_buffer, axis=0).tolist()
                 self.ppg_buffer = []
+                self.last_ppg_sample = avg_ppg_sample
             else:
-                avg_ppg_sample = [0] * self.ppg_simulator.num_channels
+                avg_ppg_sample = self.last_ppg_sample
 
             data = {
                 'timestamp': timestamp,
