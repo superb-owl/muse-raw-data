@@ -18,6 +18,55 @@
 
 #include "WebSocket.hpp"
 
+// Data structures for tracking statistics
+struct ChannelStats {
+    std::vector<float> samples;
+    float sum = 0.f;
+    float max = -std::numeric_limits<float>::infinity();
+    float min = std::numeric_limits<float>::infinity();
+};
+
+void printChannelStats(const ChannelStats& stats) {
+    float avg = stats.sum / stats.samples.size();
+    INFO("Channel stats: sum=%f, avg=%f, max=%f, min=%f, samples=%d", stats.sum, avg, stats.max, stats.min, stats.samples.size());
+}
+
+// Function to update channel statistics
+void updateChannelStats(ChannelStats& stats, float sample, float sampleRate) {
+    stats.samples.push_back(sample);
+    stats.sum += sample;
+    stats.max = std::max(stats.max, sample);
+    stats.min = std::min(stats.min, sample);
+
+    // Remove samples older than 1 second
+    while (stats.samples.size() > sampleRate * 10) {
+        INFO("Removing old sample");
+        float oldSample = stats.samples.front();
+        stats.samples.erase(stats.samples.begin());
+        stats.sum -= oldSample;
+        // Recalculate max and min if necessary
+        if (oldSample == stats.max || oldSample == stats.min) {
+            stats.max = -std::numeric_limits<float>::infinity();
+            stats.min = std::numeric_limits<float>::infinity();
+            for (float s : stats.samples) {
+                stats.max = std::max(stats.max, s);
+                stats.min = std::min(stats.min, s);
+            }
+        }
+    }
+}
+
+// Function to normalize a value
+float normalizeValue(float value, const ChannelStats& stats) {
+    float avg = stats.sum / stats.samples.size();
+    float range = stats.max - stats.min;
+    // INFO("Value: %f, Avg: %f, Range: %f", value, avg, range);
+    if (range == 0) return avg;
+    float normalized = (value - stats.min) / range;
+    return (normalized - 0.5f) * 10.f;
+}
+
+
 struct MuseHeadband : Module {
     enum ParamId {
         PARAMS_LEN
@@ -55,14 +104,19 @@ struct MuseHeadband : Module {
     // EEG data
     std::vector<std::vector<float>> eeg_samples;
     std::vector<std::vector<float>> ppg_samples;
-    int eeg_sample_rate = 256;
-    int ppg_sample_rate = 64;
+    std::vector<ChannelStats> eegStats;
+    std::vector<ChannelStats> ppgStats;
+    int sample_rate = 256;
     float sample_time = 0.f; // Accumulator for sample timing
 
     float last_sample_time = 0.f;
 
     MuseHeadband() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+
+        // Initialize eegStats and ppgStats
+        eegStats.resize(5); // 5 EEG channels
+        ppgStats.resize(3); // 3 PPG channels
 
         // Configure outputs
         configOutput(EEG1_OUTPUT, "EEG Channel 1");
@@ -138,7 +192,7 @@ struct MuseHeadband : Module {
                 WARN("Invalid EEG sample value");
                 return;
             }
-            eeg_channel_values.push_back(json_number_value(value) / 1000.0f); // Convert to millivolts
+            eeg_channel_values.push_back(json_number_value(value));
         }
         eeg_samples.push_back(std::move(eeg_channel_values));
 
@@ -155,7 +209,7 @@ struct MuseHeadband : Module {
                 WARN("Invalid PPG sample value");
                 return;
             }
-            ppg_channel_values.push_back(json_number_value(value) / 100000.0f); // Convert to millivolts
+            ppg_channel_values.push_back(json_number_value(value));
         }
         ppg_samples.push_back(std::move(ppg_channel_values));
 
@@ -181,25 +235,31 @@ struct MuseHeadband : Module {
 
         sample_time += args.sampleTime;
 
-        float eeg_sample_period = 1.f / eeg_sample_rate;
+        float sample_period = 1.f / sample_rate;
 
-        if (sample_time - last_sample_time >= eeg_sample_period) {
+        if (sample_time - last_sample_time >= sample_period) {
             last_sample_time = sample_time;
             if (!eeg_samples.empty()) {
                 std::vector<float> current_sample = std::move(eeg_samples.front());
                 eeg_samples.erase(eeg_samples.begin());
 
                 for (int i = 0; i < 5 && i < current_sample.size(); i++) {
-                    outputs[EEG1_OUTPUT + i].setVoltage(current_sample[i] * 50.0);
+                    updateChannelStats(eegStats[i], current_sample[i], sample_rate);
+                    // printChannelStats(eegStats[i]);
+                    outputs[EEG1_OUTPUT + i].setVoltage(normalizeValue(current_sample[i], eegStats[i]));
                 }
             }
             if (!ppg_samples.empty()) {
                 std::vector<float> current_sample = std::move(ppg_samples.front());
                 ppg_samples.erase(ppg_samples.begin());
 
-                INFO("PPG sample: %f %f %f", current_sample[0], current_sample[1], current_sample[2]);
                 for (int i = 0; i < 3 && i < current_sample.size(); i++) {
-                    outputs[PPG1_OUTPUT + i].setVoltage(current_sample[i]);
+                    updateChannelStats(ppgStats[i], current_sample[i], sample_rate);
+                    if (i == 1) {
+                        printChannelStats(ppgStats[i]);
+                        INFO("normalized value: %f -> %f", current_sample[i], normalizeValue(current_sample[i], ppgStats[i]));
+                    }
+                    outputs[PPG1_OUTPUT + i].setVoltage(normalizeValue(current_sample[i], ppgStats[i]));
                 }
             }
         }
