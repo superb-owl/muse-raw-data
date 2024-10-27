@@ -22,9 +22,9 @@ const line = d3.line()
 const colors = d3.schemeCategory10;
 
 let data = {
-    eeg: [[], [], [], []],
+    eeg: [[], [], [], [], []],
     ppg: [[], [], []],
-    eegRaw: [[], [], [], []],
+    eegRaw: [[], [], [], [], []],
     ppgRaw: [[], [], []]
 };
 
