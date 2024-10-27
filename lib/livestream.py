@@ -113,32 +113,19 @@ class BioSignalStreamer:
 
         async with self.buffer_lock:
             for i, eeg_time in enumerate(eeg_times):
-                # Find the closest PPG samples
-                ppg_indices = [j for j, ppg_time in enumerate(ppg_times) if abs(ppg_time - eeg_time) < 1/PPG_SAMPLE_RATE]
-
-                if ppg_indices:
-                    # Average PPG samples if multiple are found
-                    avg_ppg = np.mean([ppg_data[j] for j in ppg_indices], axis=0).tolist()
-                else:
-                    # Use the closest PPG sample if no exact match
-                    closest_ppg_index = min(range(len(ppg_times)), key=lambda j: abs(ppg_times[j] - eeg_time))
-                    avg_ppg = ppg_data[closest_ppg_index]
 
                 datapoint = {
                     'timestamp': eeg_time,
                     'eeg_channels': eeg_data[i],
-                    'ppg_channels': avg_ppg
                 }
                 self.data_buffer.append(datapoint)
 
     async def send_data_to_clients(self):
         while True:
-            print('send data', self.clients, len(self.data_buffer))
+            async with self.buffer_lock:
+                datapoints = self.data_buffer
+                self.data_buffer = []
             if self.clients:
-                async with self.buffer_lock:
-                    datapoints = self.data_buffer
-                    self.data_buffer = []
-
                 for datapoint in datapoints:
                     message = json.dumps(datapoint)
                     await asyncio.gather(
